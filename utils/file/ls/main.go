@@ -73,17 +73,6 @@ func ParseArgs(args []string) (*Config, error) {
 	return config, nil
 }
 
-// ParseDirectory extracts the directory to list from command-line arguments.
-// If no directory is specified, returns the current working directory.
-// Deprecated: Use ParseArgs instead for more comprehensive argument parsing.
-func ParseDirectory(args []string) (string, error) {
-	config, err := ParseArgs(args)
-	if err != nil {
-		return "", err
-	}
-	return config.Directory, nil
-}
-
 // run executes the ls logic for a given configuration
 func run(config *Config, stdout, stderr io.Writer) int {
 	// Read directory entries

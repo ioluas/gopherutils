@@ -18,7 +18,6 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go-version }}
-          go-version-file: go.mod
           cache: true
           cache-dependency-path: go.sum
 
@@ -29,7 +28,6 @@ jobs:
 
       - name: Test
         run: |
-          make deps
+          make all
           make fmt
           make test
-          make all
