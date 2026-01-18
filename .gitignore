@@ -20,4 +20,3 @@ go.work
 # Build output
 /utils/file/ls/ls
 build/*
-!build/.gitkeep
