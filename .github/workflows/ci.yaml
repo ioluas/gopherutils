@@ -1,0 +1,36 @@
+name: CI
+
+on: [ push ]
+
+permissions:
+  contents: read
+
+jobs:
+  name: Code Quality
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: [ '1.23.x', '1.24.x', '1.25.x' ]
+
+    steps:
+      - uses: actions/checkout@v5
+      - name: Setup Go ${{ matrix.go-version }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.6
+
+      - name: Test
+        run: |
+          make deps
+          make fmt
+          make test
+          make all
