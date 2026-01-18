@@ -6,7 +6,6 @@ permissions:
   contents: read
 
 jobs:
-  name: Code Quality
   build:
     runs-on: ubuntu-latest
     strategy:
