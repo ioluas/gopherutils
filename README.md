@@ -1,4 +1,4 @@
-# gopherutils
+# <img src="gopherutils.png" width="80" height="80" valign="middle" alt="gopherutils logo"> gopherutils
 
 [![Build](https://github.com/ioluas/gopherutils/actions/workflows/ci.yaml/badge.svg)](https://github.com/ioluas/gopherutils/actions/workflows/ci.yaml)
 [![codecov](https://codecov.io/github/ioluas/gopherutils/graph/badge.svg?token=EZPA9HO9SB)](https://codecov.io/github/ioluas/gopherutils)
@@ -160,3 +160,26 @@ Personal project to implement Linux coreutils in Go.
 | `help`    | Built-in help       | &#10007; |
 | `nice`    | Run with priority   | &#10007; |
 | `nohup`   | **Not coreutils**   | &#10007; |
+
+
+## Development
+
+This project uses a `Makefile` to manage builds, testing, and quality control.
+
+| Target      | Description                                      |
+|-------------|--------------------------------------------------|
+| `make all`  | Build all utilities (default)                    |
+| `make deps` | Download and install Go dependencies             |
+| `make build`| Alias for `all`                                  |
+| `make clean`| Remove built binaries and test cache             |
+| `make test` | Run tests for all utilities                      |
+| `make coverage` | Run tests and generate coverage report       |
+| `make fmt`  | Format all Go code                               |
+| `make lint` | Lint all Go code                                 |
+| `make CQ`   | Run Code Quality (lint, fmt, coverage)           |
+| `make list` | List all discovered utilities                    |
+| `make install` | Install binaries to user-local bin directory (configurable with `INSTALL_PREFIX`) |
+| `make uninstall` | Remove binaries from installation directory |
+| `make help` | Show help message with all targets               |
+
+
