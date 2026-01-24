@@ -267,12 +267,15 @@ func run(path string, config *Config, stdout, stderr io.Writer) int {
 
 	// Warn if -h is used without -l
 	if (config.HumanReadable || config.SI) && !config.LongListing {
-		// "HumanReadable should only work with long and size enabled otherwise ignored."
-		flag := "-h"
-		if config.SI {
-			flag = "--si"
+		if config.HumanReadable && config.SI {
+			_, _ = fmt.Fprintf(stderr, "ls: warning: options -h and --si are ignored when -l is not used\n")
+		} else {
+			flag := "-h"
+			if config.SI {
+				flag = "--si"
+			}
+			_, _ = fmt.Fprintf(stderr, "ls: warning: option %s is ignored when -l is not used\n", flag)
 		}
-		_, _ = fmt.Fprintf(stderr, "ls: warning: option %s is ignored when -l is not used\n", flag)
 	}
 
 	// Warn if --author is used without -l

@@ -28,10 +28,14 @@ jobs:
         with:
           version: v2.6
 
+      - name: staticcheck
+        uses: dominikh/staticcheck-action@v1
+        with:
+          install-go: false
+          cache-key: ${{ matrix.go-version }}
+
       - name: Test
         run: |
-          go install honnef.co/go/tools/cmd/staticcheck@latest
-          staticcheck ./...
           go fmt ./...
           go vet ./...
           go test -race -coverprofile=coverage.txt -covermode=atomic ./...

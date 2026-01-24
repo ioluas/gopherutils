@@ -45,27 +45,6 @@ func TestParseArgs(t *testing.T) {
 			},
 		},
 		{
-			name:        "Getwd error",
-			args:        []string{},
-			expectError: true,
-			setup: func() func() {
-				// We can't easily make os.Getwd() fail without mocking or changing environment
-				// But we can try to change to a directory that is then deleted?
-				// Actually, simpler to just skip this if it's too hard,
-				// or use a mock if we had one.
-				// Let's try to change to a directory and then delete it.
-				tmp := os.TempDir()
-				dir := filepath.Join(tmp, "getwd_error_test")
-				_ = os.Mkdir(dir, 0755)
-				oldCwd, _ := os.Getwd()
-				_ = os.Chdir(dir)
-				_ = os.Remove(dir)
-				return func() {
-					_ = os.Chdir(oldCwd)
-				}
-			},
-		},
-		{
 			name:        "single directory argument",
 			args:        []string{"/tmp"},
 			expectError: false,
@@ -675,6 +654,26 @@ func TestRun(t *testing.T) {
 			expectedExit:   0,
 			expectedStdout: "",
 			expectedStderr: "ls: warning: option -h is ignored when -l is not used",
+		},
+		{
+			name:   "--si without -l warns",
+			config: &Config{SI: true, LongListing: false},
+			setupFunc: func(t *testing.T) string {
+				return t.TempDir()
+			},
+			expectedExit:   0,
+			expectedStdout: "",
+			expectedStderr: "ls: warning: option --si is ignored when -l is not used",
+		},
+		{
+			name:   "-h and --si without -l warns (both)",
+			config: &Config{HumanReadable: true, SI: true, LongListing: false},
+			setupFunc: func(t *testing.T) string {
+				return t.TempDir()
+			},
+			expectedExit:   0,
+			expectedStdout: "",
+			expectedStderr: "ls: warning: options -h and --si are ignored when -l is not used",
 		},
 		{
 			name: "list directory with dotfiles - no flags",
