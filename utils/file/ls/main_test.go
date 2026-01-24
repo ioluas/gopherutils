@@ -257,6 +257,76 @@ func TestParseArgs(t *testing.T) {
 			},
 		},
 		{
+			name:        "-b flag",
+			args:        []string{"-b"},
+			expectError: false,
+			checkConfig: func(t *testing.T, config *Config) {
+				if !config.Escape {
+					t.Error("Expected Escape to be true")
+				}
+			},
+		},
+		{
+			name:        "--escape flag",
+			args:        []string{"--escape"},
+			expectError: false,
+			checkConfig: func(t *testing.T, config *Config) {
+				if !config.Escape {
+					t.Error("Expected Escape to be true")
+				}
+			},
+		},
+		{
+			name:        "-B flag",
+			args:        []string{"-B"},
+			expectError: false,
+			checkConfig: func(t *testing.T, config *Config) {
+				if !config.IgnoreBackups {
+					t.Error("Expected IgnoreBackups to be true")
+				}
+			},
+		},
+		{
+			name:        "--ignore-backups flag",
+			args:        []string{"--ignore-backups"},
+			expectError: false,
+			checkConfig: func(t *testing.T, config *Config) {
+				if !config.IgnoreBackups {
+					t.Error("Expected IgnoreBackups to be true")
+				}
+			},
+		},
+		{
+			name:        "--si flag",
+			args:        []string{"--si"},
+			expectError: false,
+			checkConfig: func(t *testing.T, config *Config) {
+				if !config.SI {
+					t.Error("Expected SI to be true")
+				}
+			},
+		},
+		{
+			name:        "-d flag",
+			args:        []string{"-d"},
+			expectError: false,
+			checkConfig: func(t *testing.T, config *Config) {
+				if !config.ListDirectory {
+					t.Error("Expected ListDirectory to be true")
+				}
+			},
+		},
+		{
+			name:        "--directory flag",
+			args:        []string{"--directory"},
+			expectError: false,
+			checkConfig: func(t *testing.T, config *Config) {
+				if !config.ListDirectory {
+					t.Error("Expected ListDirectory to be true")
+				}
+			},
+		},
+		{
 			name:        "unknown flag",
 			args:        []string{"-x"},
 			expectError: true,
@@ -877,9 +947,32 @@ func TestFormatSize(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got := formatSize(tt.input)
+		got := formatSize(tt.input, 1024)
 		if got != tt.expected {
-			t.Errorf("formatSize(%d) = %q, want %q", tt.input, got, tt.expected)
+			t.Errorf("formatSize(%d, 1024) = %q, want %q", tt.input, got, tt.expected)
+		}
+	}
+}
+
+func TestFormatSizeSI(t *testing.T) {
+	tests := []struct {
+		input    int64
+		expected string
+	}{
+		{0, "0"},
+		{100, "100"},
+		{999, "999"},
+		{1000, "1.0K"},
+		{1500, "1.5K"},
+		{1000 * 1000, "1.0M"},
+		{1000*1000*2 + 500*1000, "2.5M"},
+		{1000 * 1000 * 1000, "1.0G"},
+	}
+
+	for _, tt := range tests {
+		got := formatSize(tt.input, 1000)
+		if got != tt.expected {
+			t.Errorf("formatSize(%d, 1000) = %q, want %q", tt.input, got, tt.expected)
 		}
 	}
 }
@@ -1229,9 +1322,9 @@ func TestFormatSizeEdgeCases(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got := formatSize(tt.input)
+		got := formatSize(tt.input, 1024)
 		if got != tt.expected {
-			t.Errorf("formatSize(%d) = %q, want %q", tt.input, got, tt.expected)
+			t.Errorf("formatSize(%d, 1024) = %q, want %q", tt.input, got, tt.expected)
 		}
 	}
 }
@@ -1410,5 +1503,216 @@ func TestPrintLongListWithHumanReadable(t *testing.T) {
 	// Should contain human-readable size (e.g., "2.0K")
 	if !strings.Contains(output, "K") && !strings.Contains(output, "testfile.txt") {
 		t.Errorf("Expected output to contain human-readable size or filename, got: %q", output)
+	}
+}
+
+func TestPrintLongListWithSI(t *testing.T) {
+	tmpDir := t.TempDir()
+	// Create a file with a specific size to test SI format
+	// 2000 bytes should be 2.0K in SI (base 1000)
+	testContent := make([]byte, 2000)
+	if err := os.WriteFile(filepath.Join(tmpDir, "sifile.txt"), testContent, 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	config := &Config{
+		LongListing: true,
+		SI:          true,
+	}
+
+	var buf bytes.Buffer
+	exitCode := run(tmpDir, config, &buf, &buf)
+	if exitCode != 0 {
+		t.Errorf("Expected exit code 0, got %d", exitCode)
+	}
+
+	output := buf.String()
+	// Should contain SI size "2.0K" (because 2000 / 1000 = 2.0)
+	if !strings.Contains(output, "2.0K") {
+		t.Errorf("Expected output to contain '2.0K', got: %q", output)
+	}
+}
+
+func TestRunWithSIWarning(t *testing.T) {
+	tmpDir := t.TempDir()
+	config := &Config{
+		SI:          true,
+		LongListing: false,
+	}
+
+	var stdout, stderr bytes.Buffer
+	exitCode := run(tmpDir, config, &stdout, &stderr)
+	if exitCode != 0 {
+		t.Errorf("Expected exit code 0, got %d", exitCode)
+	}
+
+	gotStderr := stderr.String()
+	expectedWarning := "ls: warning: option --si is ignored when -l is not used"
+	if !strings.Contains(gotStderr, expectedWarning) {
+		t.Errorf("Expected stderr to contain %q, got %q", expectedWarning, gotStderr)
+	}
+}
+
+func TestQuoteName(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"plain", "plain"},
+		{"space ", "space "},
+		{"newline\n", `newline\n`},
+		{"tab\t", `tab\t`},
+		{"carriage\r", `carriage\r`},
+		{"backspace\b", `backspace\b`},
+		{"formfeed\f", `formfeed\f`},
+		{"vtab\v", `vtab\v`},
+		{"bell\a", `bell\a`},
+		{"backslash\\", `backslash\\`},
+		{"non-graphic\x01", `non-graphic\001`},
+		{"non-graphic\x1f", `non-graphic\037`},
+		{"non-graphic\x7f", `non-graphic\177`},
+		{"utf8-日本語", "utf8-\\346\\227\\245\\346\\234\\254\\350\\252\\236"},
+	}
+
+	for _, tt := range tests {
+		got := quoteName(tt.input)
+		if got != tt.expected {
+			t.Errorf("quoteName(%q) = %q, want %q", tt.input, got, tt.expected)
+		}
+	}
+}
+
+func TestRunWithEscape(t *testing.T) {
+	tmpDir := t.TempDir()
+	// Use a filename with a newline
+	filename := "file\nwith\nnewline"
+	filePath := filepath.Join(tmpDir, filename)
+	if err := os.WriteFile(filePath, []byte("test"), 0644); err != nil {
+		// On some systems, newlines in filenames might not be allowed.
+		// If this fails, we skip the test.
+		t.Skipf("Skipping test because filename with newline could not be created: %v", err)
+	}
+
+	config := &Config{
+		Escape: true,
+	}
+
+	var buf bytes.Buffer
+	exitCode := run(tmpDir, config, &buf, io.Discard)
+	if exitCode != 0 {
+		t.Errorf("Expected exit code 0, got %d", exitCode)
+	}
+
+	output := buf.String()
+	expected := "file\\nwith\\nnewline\n"
+	if output != expected {
+		t.Errorf("Expected output %q, got %q", expected, output)
+	}
+
+	// Test long listing with escape
+	buf.Reset()
+	config.LongListing = true
+	exitCode = run(tmpDir, config, &buf, io.Discard)
+	if exitCode != 0 {
+		t.Errorf("Expected exit code 0, got %d", exitCode)
+	}
+	output = buf.String()
+	if !strings.Contains(output, "file\\nwith\\nnewline") {
+		t.Errorf("Expected long listing to contain escaped filename, got: %q", output)
+	}
+}
+
+func TestIgnoreBackups(t *testing.T) {
+	tmpDir := t.TempDir()
+	files := []string{"file1.txt", "file1.txt~", "file2.txt", "README.md~"}
+	for _, f := range files {
+		if err := os.WriteFile(filepath.Join(tmpDir, f), []byte("test"), 0644); err != nil {
+			t.Fatalf("Failed to create test file %s: %v", f, err)
+		}
+	}
+
+	tests := []struct {
+		name     string
+		config   *Config
+		expected string
+	}{
+		{
+			name:     "no ignore-backups",
+			config:   &Config{},
+			expected: "README.md~\nfile1.txt\nfile1.txt~\nfile2.txt\n",
+		},
+		{
+			name:     "with ignore-backups",
+			config:   &Config{IgnoreBackups: true},
+			expected: "file1.txt\nfile2.txt\n",
+		},
+		{
+			name:     "with ignore-backups and show-all",
+			config:   &Config{IgnoreBackups: true, ShowAll: true},
+			expected: ".\n..\nfile1.txt\nfile2.txt\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			exitCode := run(tmpDir, tt.config, &stdout, &stderr)
+			if exitCode != 0 {
+				t.Fatalf("run() failed: %v", stderr.String())
+			}
+			got := stdout.String()
+			if got != tt.expected {
+				t.Errorf("Expected stdout %q, got %q", tt.expected, got)
+			}
+		})
+	}
+}
+
+func TestListDirectory(t *testing.T) {
+	tmpDir := t.TempDir()
+	subdir := filepath.Join(tmpDir, "subdir")
+	if err := os.Mkdir(subdir, 0755); err != nil {
+		t.Fatalf("failed to create subdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(subdir, "file.txt"), []byte("test"), 0644); err != nil {
+		t.Fatalf("failed to create file: %v", err)
+	}
+
+	tests := []struct {
+		name           string
+		path           string
+		config         *Config
+		expectedStdout string
+	}{
+		{
+			name:           "list directory itself",
+			path:           subdir,
+			config:         &Config{ListDirectory: true},
+			expectedStdout: subdir + "\n",
+		},
+		{
+			name:           "list directory itself long format",
+			path:           subdir,
+			config:         &Config{ListDirectory: true, LongListing: true},
+			expectedStdout: "drwxr-xr-x", // Just check prefix for mode
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			exitCode := run(tt.path, tt.config, &stdout, &stderr)
+			if exitCode != 0 {
+				t.Fatalf("run() failed: %v", stderr.String())
+			}
+			got := stdout.String()
+			if !strings.Contains(got, tt.expectedStdout) {
+				t.Errorf("Expected stdout to contain %q, got %q", tt.expectedStdout, got)
+			}
+			// Verify it doesn't list contents
+			if strings.Contains(got, "file.txt") {
+				t.Errorf("Expected stdout NOT to contain 'file.txt', but it did: %q", got)
+			}
+		})
 	}
 }

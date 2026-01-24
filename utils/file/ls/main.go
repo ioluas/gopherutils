@@ -18,10 +18,11 @@ import (
 	"github.com/spf13/pflag"
 )
 
-// dirEntryWrapper implements os.DirEntry for "." and ".."
+// dirEntryWrapper implements os.DirEntry for "." and "..", or for -d flag
 type dirEntryWrapper struct {
 	name    string
-	dirPath string // The path of the directory whose entries are being listed
+	dirPath string // The path of the directory whose entries are being listed, or the path to the entry itself
+	isRoot  bool   // If true, Info() should stat dirPath directly
 }
 
 func (d *dirEntryWrapper) Name() string {
@@ -29,14 +30,25 @@ func (d *dirEntryWrapper) Name() string {
 }
 
 func (d *dirEntryWrapper) IsDir() bool {
-	return true
+	info, err := d.Info()
+	if err != nil {
+		return false
+	}
+	return info.IsDir()
 }
 
 func (d *dirEntryWrapper) Type() fs.FileMode {
-	return fs.ModeDir
+	info, err := d.Info()
+	if err != nil {
+		return 0
+	}
+	return info.Mode().Type()
 }
 
 func (d *dirEntryWrapper) Info() (fs.FileInfo, error) {
+	if d.isRoot {
+		return os.Lstat(d.dirPath)
+	}
 	targetPath := d.dirPath
 	if d.name == ".." {
 		targetPath = filepath.Clean(filepath.Join(d.dirPath, ".."))
@@ -49,8 +61,12 @@ type Config struct {
 	ShowAll       bool // -a: do not ignore entries starting with .
 	ShowAlmostAll bool // -A: do not list implied . and ..
 	LongListing   bool // -l: use a long listing format
-	HumanReadable bool // -h: print sizes in human readable format
+	HumanReadable bool // -h: with -l, print sizes in human readable format
+	SI            bool // --si: with -l, print sizes in powers of 1000 not 1024
 	ShowAuthor    bool // --author: with -l, print the author of each file
+	Escape        bool // -b, --escape: print C-style escapes for nongraphic characters
+	IgnoreBackups bool // -B, --ignore-backups: do not list implied entries ending with ~
+	ListDirectory bool // -d, --directory: list directories themselves, not their contents
 }
 
 func main() {
@@ -101,8 +117,12 @@ func ParseArgs(args []string, stderr io.Writer) (*Config, error) {
 	flagSet.BoolVarP(&config.ShowAll, "all", "a", false, "do not ignore entries starting with .")
 	flagSet.BoolVarP(&config.ShowAlmostAll, "almost-all", "A", false, "do not list implied . and ..")
 	flagSet.BoolVarP(&config.LongListing, "long", "l", false, "use a long listing format")
-	flagSet.BoolVarP(&config.HumanReadable, "human-readable", "h", false, "print sizes in human readable format (e.g., 1K 234M 2G)")
+	flagSet.BoolVarP(&config.HumanReadable, "human-readable", "h", false, "with -l, print sizes in human readable format (e.g., 1K 234M 2G)")
+	flagSet.BoolVar(&config.SI, "si", false, "with -l, print sizes in powers of 1000 not 1024")
 	flagSet.BoolVar(&config.ShowAuthor, "author", false, "with -l, print the author of each file. Note: Due to OS/filesystem limitations, the author is typically the same as the owner.")
+	flagSet.BoolVarP(&config.Escape, "escape", "b", false, "print C-style escapes for nongraphic characters")
+	flagSet.BoolVarP(&config.IgnoreBackups, "ignore-backups", "B", false, "do not list implied entries ending with ~")
+	flagSet.BoolVarP(&config.ListDirectory, "directory", "d", false, "list directories themselves, not their contents")
 	flagSet.BoolVarP(&showHelp, "help", "?", false, "display this help and exit")
 
 	// Parse the arguments
@@ -141,11 +161,60 @@ func ParseArgs(args []string, stderr io.Writer) (*Config, error) {
 	return config, nil
 }
 
+func quoteName(name string) string {
+	var b strings.Builder
+	for i := 0; i < len(name); i++ {
+		c := name[i]
+		switch c {
+		case '\a':
+			b.WriteString(`\a`)
+		case '\b':
+			b.WriteString(`\b`)
+		case '\f':
+			b.WriteString(`\f`)
+		case '\n':
+			b.WriteString(`\n`)
+		case '\r':
+			b.WriteString(`\r`)
+		case '\t':
+			b.WriteString(`\t`)
+		case '\v':
+			b.WriteString(`\v`)
+		case '\\':
+			b.WriteString(`\\`)
+		default:
+			if c < 32 || c >= 127 {
+				_, _ = fmt.Fprintf(&b, "\\%03o", c)
+			} else {
+				b.WriteByte(c)
+			}
+		}
+	}
+	return b.String()
+}
+
 // run executes the ls logic for a given configuration
-func run(directory string, config *Config, stdout, stderr io.Writer) int {
-	entries, err := os.ReadDir(directory)
+func run(path string, config *Config, stdout, stderr io.Writer) int {
+	if config.ListDirectory {
+		// List the directory itself, not its contents
+		entry := &dirEntryWrapper{name: path, dirPath: path, isRoot: true}
+		entries := []os.DirEntry{entry}
+
+		if config.LongListing {
+			printLongList(stdout, entries, config)
+		} else {
+			name := entry.Name()
+			if config.Escape {
+				name = quoteName(name)
+			}
+			printEntries(stdout, []string{name})
+		}
+		return 0
+	}
+
+	entries, err := os.ReadDir(path)
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "ls: cannot access '%s': %v\n", directory, err)
+		_, _ = fmt.Fprintf(stderr, "ls: cannot access '%s': %v\n", path, err)
 		return 2
 	}
 
@@ -153,8 +222,8 @@ func run(directory string, config *Config, stdout, stderr io.Writer) int {
 
 	// If ShowAll is true, explicitly add "." and ".."
 	if config.ShowAll {
-		filtered = append(filtered, &dirEntryWrapper{name: ".", dirPath: directory})
-		filtered = append(filtered, &dirEntryWrapper{name: "..", dirPath: directory})
+		filtered = append(filtered, &dirEntryWrapper{name: ".", dirPath: path})
+		filtered = append(filtered, &dirEntryWrapper{name: "..", dirPath: path})
 	}
 
 	for _, entry := range entries {
@@ -176,6 +245,10 @@ func run(directory string, config *Config, stdout, stderr io.Writer) int {
 			}
 		}
 		// If it's not a dotfile, shouldInclude remains true
+		if shouldInclude && config.IgnoreBackups && strings.HasSuffix(name, "~") {
+			shouldInclude = false
+		}
+
 		if shouldInclude {
 			filtered = append(filtered, entry)
 		}
@@ -187,9 +260,13 @@ func run(directory string, config *Config, stdout, stderr io.Writer) int {
 	})
 
 	// Warn if -h is used without -l
-	if config.HumanReadable && !config.LongListing {
+	if (config.HumanReadable || config.SI) && !config.LongListing {
 		// "HumanReadable should only work with long and size enabled otherwise ignored."
-		_, _ = fmt.Fprintf(stderr, "ls: warning: option -h is ignored when -l is not used\n")
+		flag := "-h"
+		if config.SI {
+			flag = "--si"
+		}
+		_, _ = fmt.Fprintf(stderr, "ls: warning: option %s is ignored when -l is not used\n", flag)
 	}
 
 	// Warn if --author is used without -l
@@ -202,7 +279,11 @@ func run(directory string, config *Config, stdout, stderr io.Writer) int {
 	} else {
 		names := make([]string, len(filtered))
 		for i, e := range filtered {
-			names[i] = e.Name()
+			name := e.Name()
+			if config.Escape {
+				name = quoteName(name)
+			}
+			names[i] = name
 		}
 		printEntries(stdout, names)
 	}
@@ -241,7 +322,7 @@ func printLongList(w io.Writer, entries []os.DirEntry, config *Config) {
 
 		sysStat, ok := info.Sys().(*syscall.Stat_t)
 		if ok {
-			nlink = uint64(sysStat.Nlink)
+			nlink = sysStat.Nlink
 			if config.ShowAuthor {
 				owner, group = fsutil.GetOwnerGroup(sysStat)
 			}
@@ -254,10 +335,17 @@ func printLongList(w io.Writer, entries []os.DirEntry, config *Config) {
 		}
 
 		var sizeStr string
-		if config.HumanReadable {
-			sizeStr = formatSize(size)
+		if config.SI {
+			sizeStr = formatSize(size, 1000)
+		} else if config.HumanReadable {
+			sizeStr = formatSize(size, 1024)
 		} else {
 			sizeStr = fmt.Sprintf("%d", size)
+		}
+
+		name := entry.Name()
+		if config.Escape {
+			name = quoteName(name)
 		}
 
 		d := fileDetails{
@@ -267,7 +355,7 @@ func printLongList(w io.Writer, entries []os.DirEntry, config *Config) {
 			group:   group,
 			sizeStr: sizeStr,
 			modTime: info.ModTime(),
-			name:    entry.Name(),
+			name:    name,
 		}
 		details = append(details, d)
 
@@ -319,14 +407,13 @@ func printLongList(w io.Writer, entries []os.DirEntry, config *Config) {
 	}
 }
 
-func formatSize(size int64) string {
-	const unit = 1024
+func formatSize(size int64, unit int64) string {
 	if size < unit {
 		return fmt.Sprintf("%d", size)
 	}
 	const suffixes = "KMGTPE"
 	const maxExp = len(suffixes) - 1
-	div, exp := int64(unit), 0
+	div, exp := unit, 0
 	for n := size / unit; n >= unit && exp < maxExp; n /= unit {
 		div *= unit
 		exp++
