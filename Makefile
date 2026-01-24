@@ -8,6 +8,7 @@ GO := go
 GOFLAGS := -ldflags="-s -w"
 
 # Find all directories containing main.go files under utils/
+# We use 'shell' to find them.
 UTIL_DIRS := $(shell find $(UTILS_DIR) -name "main.go" -exec dirname {} \;)
 
 # Extract binary names from directory names (e.g., utils/file/ls -> ls)
@@ -24,19 +25,22 @@ deps:
 .PHONY: all
 all: deps $(BINARIES)
 
-# Build individual binaries
-$(BINARY_DIR)/%: $(UTILS_DIR)/%/main.go | $(BINARY_DIR)
-	@echo "Building $*..."
-	@$(GO) build $(GOFLAGS) -o $@ $(shell find $(UTILS_DIR) -type d -name "$*")/main.go
+# Alias build to all
+.PHONY: build
+build: all
 
-# Alternative pattern rule to handle nested directories
-$(BINARY_DIR)/%: $(UTILS_DIR)/*/*/main.go | $(BINARY_DIR)
-	@echo "Building $*..."
-	@$(GO) build $(GOFLAGS) -o $@ $(shell find $(UTILS_DIR) -type d -name "$*")/main.go
-
-# Create binary directory if it doesn't exist
-$(BINARY_DIR):
+# Template for building a single utility
+# Arguments:
+#   1: Source directory path (e.g., utils/file/ls)
+define BUILD_RULE
+$(BINARY_DIR)/$(notdir $(1)): $(1)/main.go
+	@echo "Building $$(notdir $(1))..."
 	@mkdir -p $(BINARY_DIR)
+	@$(GO) build $(GOFLAGS) -o $$@ $$<
+endef
+
+# Generate detailed build rules for each utility
+$(foreach dir,$(UTIL_DIRS),$(eval $(call BUILD_RULE,$(dir))))
 
 # Clean built binaries
 .PHONY: clean
@@ -66,10 +70,16 @@ list:
 .PHONY: test
 test:
 	@echo "Running tests..."
-	@$(GO) test ./...
+	@$(GO) test -cover ./...
 
-# Format all Go code
-.PHONY: fmt
+# Run tests and generate coverage report
+.PHONY: coverage
+coverage:
+	@echo "Running tests with coverage..."
+	@$(GO) test -coverprofile=coverage.txt ./...
+	@echo "To view coverage report, run: go tool cover -html=coverage.txt"
+
+# Format all Go code.PHONY: fmt
 fmt:
 	@echo "Formatting code..."
 	@$(GO) fmt ./...
@@ -87,12 +97,14 @@ help:
 	@echo ""
 	@echo "Targets:"
 	@echo "  all        - Build all utilities (default)"
+	@echo "  build      - Alias for all"
 	@echo "  deps       - Download and install Go dependencies"
 	@echo "  clean      - Remove built binaries"
 	@echo "  install    - Install binaries to /usr/local/bin"
 	@echo "  uninstall  - Remove binaries from /usr/local/bin"
 	@echo "  list       - List all discovered utilities"
 	@echo "  test       - Run tests"
+	@echo "  coverage   - Run tests with coverage and generate report"
 	@echo "  fmt        - Format Go code"
 	@echo "  lint       - Lint Go code"
 	@echo "  help       - Show this help message"
