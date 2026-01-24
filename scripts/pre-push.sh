@@ -28,10 +28,10 @@ check_coverage() {
         # coverage.txt format: name.go:line.col,line.col num_statements count
 
         # Total statements: sum of the second to last field for this file
-        TOTAL_STMTS=$(grep "^$FILE:" "$COVERAGE_FILE" | awk '{sum += $2} END {print sum}')
+        TOTAL_STMTS=$(awk -v f="$FILE:" 'index($0, f) == 1 {sum += $2} END {print sum}' "$COVERAGE_FILE")
 
         # Covered statements: sum of the second to last field for this file where the last field (count) > 0
-        COVERED_STMTS=$(grep "^$FILE:" "$COVERAGE_FILE" | awk '$3 > 0 {sum += $2} END {print sum}')
+        COVERED_STMTS=$(awk -v f="$FILE:" 'index($0, f) == 1 && $3 > 0 {sum += $2} END {print sum}' "$COVERAGE_FILE")
 
         # Handle case where TOTAL_STMTS is 0 (should not happen for files in coverage.txt)
         if [ "$TOTAL_STMTS" -eq 0 ]; then

@@ -1,4 +1,4 @@
-# <img src="gopherutils.png" width="80" height="80" valign="middle"> gopherutils
+# <img src="gopherutils.png" width="80" height="80" valign="middle" alt="gopherutils logo"> gopherutils
 
 [![Build](https://github.com/ioluas/gopherutils/actions/workflows/ci.yaml/badge.svg)](https://github.com/ioluas/gopherutils/actions/workflows/ci.yaml)
 [![codecov](https://codecov.io/github/ioluas/gopherutils/graph/badge.svg?token=EZPA9HO9SB)](https://codecov.io/github/ioluas/gopherutils)
