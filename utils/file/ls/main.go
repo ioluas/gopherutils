@@ -267,7 +267,7 @@ func printLongList(w io.Writer, entries []os.DirEntry, config *Config) {
 			group:   group,
 			sizeStr: sizeStr,
 			modTime: info.ModTime(),
-			name:    info.Name(),
+			name:    entry.Name(),
 		}
 		details = append(details, d)
 

@@ -91,6 +91,10 @@ lint:
 	@echo "Linting code..."
 	@golangci-lint run ./...
 
+# Code Quality target: lint, fmt, and coverage
+.PHONY: CQ
+CQ: lint fmt coverage
+
 # Help target
 .PHONY: help
 help:
@@ -108,4 +112,5 @@ help:
 	@echo "  coverage   - Run tests with coverage and generate report"
 	@echo "  fmt        - Format Go code"
 	@echo "  lint       - Lint Go code"
+	@echo "  CQ         - Run lint, fmt, and coverage"
 	@echo "  help       - Show this help message"

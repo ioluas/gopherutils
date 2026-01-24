@@ -1072,6 +1072,29 @@ func TestPrintLongListWithShowAll(t *testing.T) {
 	if !foundFile {
 		t.Errorf("Expected output to contain 'file1.txt' entry. Output: %q", output)
 	}
+
+	// Verify that "." and ".." are present and shown correctly
+	foundDot := false
+	foundDotDot := false
+	for _, line := range lines {
+		fields := strings.Fields(line)
+		if len(fields) > 0 {
+			lastField := fields[len(fields)-1]
+			if lastField == "." {
+				foundDot = true
+			}
+			if lastField == ".." {
+				foundDotDot = true
+			}
+		}
+	}
+	if !foundDot {
+		t.Errorf("Expected output to contain '.' entry. Output: %q", output)
+	}
+	if !foundDotDot {
+		t.Errorf("Expected output to contain '..' entry. Output: %q", output)
+	}
+
 	// Verify that we got some output (at least file1.txt should be there)
 	if len(lines) == 0 {
 		t.Error("Expected at least one line of output")
