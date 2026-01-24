@@ -1,28 +1,31 @@
 # gopherutils
 
+[![Build](https://github.com/ioluas/gopherutils/actions/workflows/ci.yaml/badge.svg)](https://github.com/ioluas/gopherutils/actions/workflows/ci.yaml)
+[![codecov](https://codecov.io/github/ioluas/gopherutils/graph/badge.svg?token=EZPA9HO9SB)](https://codecov.io/github/ioluas/gopherutils)
+
 Personal project to implement Linux coreutils in Go.
 
 
 ## File Utilities
 
-| Command    | Description                                    | Status           |
-|------------|------------------------------------------------|:-----------------|
-| `ls`       | List directory contents                        | &#9083; &#10003; |
-| `cp`       | Copy files and directories                     | &#10007;         |
-| `mv`       | Move (rename) files                            | &#10007;         |
-| `rm`       | Remove files or directories                    | &#10007;         |
-| `unlink`   | Remove a file                                  | &#10007;         |
-| `install`  | Copy files and set ownership/permissions       | &#10007;         |
-| `touch`    | Change file timestamps (or create empty files) | &#10007;         |
-| `stat`     | Display file or filesystem metadata            | &#10007;         |
-| `realpath` | Resolve symbolic links                         | &#10007;         |
-| `readlink` | Output symbolic link target                    | &#10007;         |
-| `basename` | Strip directory path                           | &#10007;         |
-| `dirname`  | Extract directory path                         | &#10007;         |
-| `pathchk`  | Check path validity                            | &#10007;         |
-| `chown`    | Change file owner                              | &#10007;         |
-| `chgrp`    | Change group ownership                         | &#10007;         |
-| `chmod`    | Change permissions                             | &#10007;         |
+| Command    | Description                                    | Status   |
+|------------|------------------------------------------------|:---------|
+| `ls`       | List directory contents                        | &#9083;  |
+| `cp`       | Copy files and directories                     | &#10007; |
+| `mv`       | Move (rename) files                            | &#10007; |
+| `rm`       | Remove files or directories                    | &#10007; |
+| `unlink`   | Remove a file                                  | &#10007; |
+| `install`  | Copy files and set ownership/permissions       | &#10007; |
+| `touch`    | Change file timestamps (or create empty files) | &#10007; |
+| `stat`     | Display file or filesystem metadata            | &#10007; |
+| `realpath` | Resolve symbolic links                         | &#10007; |
+| `readlink` | Output symbolic link target                    | &#10007; |
+| `basename` | Strip directory path                           | &#10007; |
+| `dirname`  | Extract directory path                         | &#10007; |
+| `pathchk`  | Check path validity                            | &#10007; |
+| `chown`    | Change file owner                              | &#10007; |
+| `chgrp`    | Change group ownership                         | &#10007; |
+| `chmod`    | Change permissions                             | &#10007; |
 
 
 ## Directory Utilities
