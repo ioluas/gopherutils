@@ -90,7 +90,17 @@ coverage:
 .PHONY: fmt
 fmt:
 	@echo "Formatting code..."
-	@$(GO) fmt ./...
+	@gofmt -s -w $$(go list -f '{{.Dir}}' ./...)
+
+# Check Go formatting (fails if changes needed)
+.PHONY: fmt-check
+fmt-check:
+	@fmt_out=$$(gofmt -s -l $$(go list -f '{{.Dir}}' ./...)); \
+	if [ -n "$$fmt_out" ]; then \
+		echo "gofmt needed on:"; \
+		echo "$$fmt_out"; \
+		exit 1; \
+	fi
 
 # Lint all Go code (requires golangci-lint)
 .PHONY: lint
@@ -130,6 +140,7 @@ help:
 	@echo "  test         - Run tests"
 	@echo "  coverage     - Run tests with coverage and generate report"
 	@echo "  fmt          - Format Go code"
+	@echo "  fmt-check    - Fail if code is not formatted"
 	@echo "  lint         - Lint Go code"
 	@echo "  vet          - Vet Go code"
 	@echo "  staticcheck  - Run staticcheck"
