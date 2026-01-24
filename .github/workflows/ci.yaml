@@ -29,7 +29,7 @@ jobs:
       - name: Test
         run: |
           make all
-          make fmt
+          test -z "$(go fmt -l .)" 
           make test
           make coverage
 
