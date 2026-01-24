@@ -39,7 +39,7 @@ func (d *dirEntryWrapper) Type() fs.FileMode {
 func (d *dirEntryWrapper) Info() (fs.FileInfo, error) {
 	targetPath := d.dirPath
 	if d.name == ".." {
-		targetPath = filepath.Dir(d.dirPath)
+		targetPath = filepath.Clean(filepath.Join(d.dirPath, ".."))
 	}
 	return os.Stat(targetPath)
 }
@@ -234,20 +234,25 @@ func printLongList(w io.Writer, entries []os.DirEntry, config *Config) {
 			// Standard ls might print error.
 			continue
 		}
-		sysStat, ok := info.Sys().(*syscall.Stat_t)
-		if !ok {
-			continue
-		}
+
+		var nlink uint64 = 1
 		var owner, group string
-		if config.ShowAuthor {
-			owner, group = fsutil.GetOwnerGroup(sysStat)
+		size := info.Size()
+
+		sysStat, ok := info.Sys().(*syscall.Stat_t)
+		if ok {
+			nlink = uint64(sysStat.Nlink)
+			if config.ShowAuthor {
+				owner, group = fsutil.GetOwnerGroup(sysStat)
+			}
 		} else {
-			owner = "" // Display blank if --author is not used
-			group = "" // Display blank if --author is not used
+			// Non-Unix fallback
+			if config.ShowAuthor {
+				owner = "-" // Placeholder for owner
+				group = "-" // Placeholder for group
+			}
 		}
 
-		nlink := sysStat.Nlink
-		size := info.Size()
 		var sizeStr string
 		if config.HumanReadable {
 			sizeStr = formatSize(size)
@@ -319,12 +324,14 @@ func formatSize(size int64) string {
 	if size < unit {
 		return fmt.Sprintf("%d", size)
 	}
+	const suffixes = "KMGTPE"
+	const maxExp = len(suffixes) - 1
 	div, exp := int64(unit), 0
-	for n := size / unit; n >= unit; n /= unit {
+	for n := size / unit; n >= unit && exp < maxExp; n /= unit {
 		div *= unit
 		exp++
 	}
-	return fmt.Sprintf("%.1f%c", float64(size)/float64(div), "KMGTPE"[exp])
+	return fmt.Sprintf("%.1f%c", float64(size)/float64(div), suffixes[exp])
 }
 
 // printEntries prints entry names to the output writer.

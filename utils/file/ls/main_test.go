@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/pflag"
 )
@@ -378,11 +379,28 @@ func TestPrintEntries(t *testing.T) {
 	}
 }
 
+// mockFileInfo is a mock implementation of fs.FileInfo for testing.
+type mockFileInfo struct {
+	name    string
+	size    int64
+	mode    fs.FileMode
+	modTime time.Time
+	sys     interface{}
+}
+
+func (m *mockFileInfo) Name() string       { return m.name }
+func (m *mockFileInfo) Size() int64        { return m.size }
+func (m *mockFileInfo) Mode() fs.FileMode  { return m.mode }
+func (m *mockFileInfo) ModTime() time.Time { return m.modTime }
+func (m *mockFileInfo) IsDir() bool        { return m.mode.IsDir() }
+func (m *mockFileInfo) Sys() interface{}   { return m.sys }
+
 // mockDirEntry is a mock implementation of os.DirEntry for testing error cases.
 type mockDirEntry struct {
-	name    string
-	isDir   bool
-	infoErr error // The error to return from Info()
+	name     string
+	isDir    bool
+	infoErr  error       // The error to return from Info()
+	fileInfo fs.FileInfo // The file info to return from Info()
 }
 
 func (m *mockDirEntry) Name() string {
@@ -404,9 +422,71 @@ func (m *mockDirEntry) Info() (fs.FileInfo, error) {
 	if m.infoErr != nil {
 		return nil, m.infoErr
 	}
-	// This part is not strictly needed if we only test the error case,
-	// but it makes the mock more complete.
+	if m.fileInfo != nil {
+		return m.fileInfo, nil
+	}
 	return nil, errors.New("not implemented")
+}
+
+func TestPrintLongListNonUnix(t *testing.T) {
+	now := time.Now()
+	mockEntries := []os.DirEntry{
+		&mockDirEntry{
+			name: "non-unix-file",
+			fileInfo: &mockFileInfo{
+				name:    "non-unix-file",
+				size:    1234,
+				mode:    0644,
+				modTime: now,
+				sys:     nil, // Not a *syscall.Stat_t
+			},
+		},
+	}
+
+	config := &Config{LongListing: true, ShowAuthor: true}
+	var buf bytes.Buffer
+	printLongList(&buf, mockEntries, config)
+
+	output := buf.String()
+	if output == "" {
+		t.Errorf("Expected output for non-Unix entry, but got empty string")
+	}
+
+	// Output should contain nlink 1, size 1234, and placeholders for owner/group
+	// Format: mode nlink owner group size date time name
+	if !strings.Contains(output, "non-unix-file") {
+		t.Errorf("Output should contain filename, got: %q", output)
+	}
+	if !strings.Contains(output, "1234") {
+		t.Errorf("Output should contain size 1234, got: %q", output)
+	}
+	// With ShowAuthor=true, placeholders should be present
+	if !strings.Contains(output, "-") {
+		t.Errorf("Output should contain placeholders '-' for owner/group, got: %q", output)
+	}
+
+	// Test without author
+	buf.Reset()
+	config.ShowAuthor = false
+	printLongList(&buf, mockEntries, config)
+	output = buf.String()
+	// Format: mode nlink size date time name (no owner/group)
+	// We check for " - " to ensure it's not present as a column, but mode string contains "-"
+	if strings.Contains(output, " - ") || strings.Contains(output, " -") || strings.Contains(output, "- ") {
+		// Wait, mode string is like "-rw-r--r--"
+		// We should check specifically for the owner/group columns which we expect to be empty
+		fields := strings.Fields(output)
+		// Expected fields: mode, nlink, size, month, day, time, name
+		// Total 7 fields.
+		if len(fields) != 7 {
+			t.Errorf("Expected 7 fields when ShowAuthor is false, got %d: %v", len(fields), fields)
+		}
+		for _, field := range fields {
+			if field == "-" {
+				t.Errorf("Output should NOT contain placeholder '-' when ShowAuthor is false: %q", output)
+			}
+		}
+	}
 }
 
 func TestRun(t *testing.T) {
@@ -825,12 +905,6 @@ func getFileDetails(t *testing.T, filename string, owner, group string, showAuth
 	if err := os.WriteFile(filePath, []byte(""), 0644); err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer func() {
-		if err := os.RemoveAll(tmpDir); err != nil {
-			t.Errorf("Failed to remove temp directory: %v", err)
-		}
-	}()
-
 	info, err := os.Stat(filePath)
 	if err != nil {
 		t.Fatalf("Failed to stat temp file: %v", err)
@@ -938,6 +1012,25 @@ func TestDirEntryWrapper(t *testing.T) {
 	if err == nil && info != nil {
 		if info.Name() != parentInfo.Name() {
 			t.Errorf("Expected Info() for '..' to return parent dir name %s, got %s", parentInfo.Name(), info.Name())
+		}
+	}
+
+	// Test ".." wrapper with relative path "."
+	// Before fix, this will incorrectly stat "." (the current dir) instead of ".." (the parent)
+	// Because filepath.Dir(".") returns "."
+	dotDotRelativeWrapper := &dirEntryWrapper{name: "..", dirPath: "."}
+	infoRel, err := dotDotRelativeWrapper.Info()
+	if err != nil {
+		t.Errorf("Expected Info() for relative '..' to succeed, got error: %v", err)
+	}
+
+	cwd, _ := os.Getwd()
+	parentOfCwd := filepath.Dir(cwd)
+	expectedParentInfo, _ := os.Stat(parentOfCwd)
+
+	if infoRel != nil && expectedParentInfo != nil {
+		if !os.SameFile(infoRel, expectedParentInfo) {
+			t.Errorf("Expected Info() for relative '..' to return info for %s, but it didn't match", parentOfCwd)
 		}
 	}
 }
@@ -1105,6 +1198,7 @@ func TestFormatSizeEdgeCases(t *testing.T) {
 		{1024 * 1024 * 1024 * 1024, "1.0T"},
 		{1024 * 1024 * 1024 * 1024 * 1024, "1.0P"},
 		{1024 * 1024 * 1024 * 1024 * 1024 * 1024, "1.0E"},
+		{9223372036854775807, "8.0E"},
 		{2048, "2.0K"},
 		{5120, "5.0K"},
 		{1048576, "1.0M"},

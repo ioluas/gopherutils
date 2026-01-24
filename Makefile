@@ -33,10 +33,10 @@ build: all
 # Arguments:
 #   1: Source directory path (e.g., utils/file/ls)
 define BUILD_RULE
-$(BINARY_DIR)/$(notdir $(1)): $(1)/main.go
+$(BINARY_DIR)/$(notdir $(1)): $(wildcard $(1)/*.go)
 	@echo "Building $$(notdir $(1))..."
 	@mkdir -p $(BINARY_DIR)
-	@$(GO) build $(GOFLAGS) -o $$@ $$<
+	@$(GO) build $(GOFLAGS) -o $$@ ./$(1)
 endef
 
 # Generate detailed build rules for each utility
@@ -79,7 +79,8 @@ coverage:
 	@$(GO) test -coverprofile=coverage.txt ./...
 	@echo "To view coverage report, run: go tool cover -html=coverage.txt"
 
-# Format all Go code.PHONY: fmt
+# Format all Go code
+.PHONY: fmt
 fmt:
 	@echo "Formatting code..."
 	@$(GO) fmt ./...

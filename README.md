@@ -1,6 +1,6 @@
 # gopherutils
 
-[![Build](https://github.com/ioluas/gopherutils/actions/workflows/ci.yml/badge.svg)](https://github.com/ioluas/gopherutils/actions/workflows/ci.yml)
+[![Build](https://github.com/ioluas/gopherutils/actions/workflows/ci.yaml/badge.svg)](https://github.com/ioluas/gopherutils/actions/workflows/ci.yaml)
 [![codecov](https://codecov.io/github/ioluas/gopherutils/graph/badge.svg?token=EZPA9HO9SB)](https://codecov.io/github/ioluas/gopherutils)
 
 Personal project to implement Linux coreutils in Go.
