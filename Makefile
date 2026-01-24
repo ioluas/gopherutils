@@ -77,13 +77,13 @@ list:
 .PHONY: test
 test:
 	@echo "Running tests..."
-	@$(GO) test -cover ./...
+	@$(GO) test -race -cover ./...
 
 # Run tests and generate coverage report
 .PHONY: coverage
 coverage:
 	@echo "Running tests with coverage..."
-	@$(GO) test -coverprofile=coverage.txt ./...
+	@$(GO) test -coverprofile=coverage.txt -covermode=atomic ./...
 	@echo "To view coverage report, run: go tool cover -html=coverage.txt"
 
 # Format all Go code
@@ -108,9 +108,21 @@ lint:
 	@echo "Linting code..."
 	@golangci-lint run ./...
 
-# Code Quality target: lint, fmt, and coverage
+# Vet all Go code
+.PHONY: vet
+vet:
+	@echo "Vetting code..."
+	@$(GO) vet ./...
+
+# Run staticcheck (requires staticcheck)
+.PHONY: staticcheck
+staticcheck:
+	@echo "Running staticcheck..."
+	@staticcheck ./...
+
+# Code Quality target: lint, vet, staticcheck, fmt, and coverage
 .PHONY: CQ
-CQ: lint fmt coverage
+CQ: lint vet staticcheck fmt coverage
 
 # Help target
 .PHONY: help
@@ -130,5 +142,7 @@ help:
 	@echo "  fmt          - Format Go code"
 	@echo "  fmt-check    - Fail if code is not formatted"
 	@echo "  lint         - Lint Go code"
-	@echo "  CQ           - Run lint, fmt, and coverage"
+	@echo "  vet          - Vet Go code"
+	@echo "  staticcheck  - Run staticcheck"
+	@echo "  CQ           - Run lint, vet, staticcheck, fmt, and coverage"
 	@echo "  help         - Show this help message"
