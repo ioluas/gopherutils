@@ -328,7 +328,7 @@ func printLongList(w io.Writer, entries []os.DirEntry, config *Config) {
 
 		sysStat, ok := info.Sys().(*syscall.Stat_t)
 		if ok {
-			nlink = sysStat.Nlink
+			nlink = uint64(sysStat.Nlink)
 			if config.ShowAuthor {
 				owner, group = fsutil.GetOwnerGroup(sysStat)
 			}

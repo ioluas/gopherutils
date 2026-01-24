@@ -176,7 +176,9 @@ This project uses a `Makefile` to manage builds, testing, and quality control.
 | `make coverage`  | Run tests and generate coverage report                                            |
 | `make fmt`       | Format all Go code                                                                |
 | `make lint`      | Lint all Go code                                                                  |
-| `make CQ`        | Run Code Quality (lint, fmt, coverage)                                            |
+| `make vet`       | Vet all Go code                                                                   |
+| `make staticcheck`| Run staticcheck                                                                  |
+| `make CQ`        | Run Code Quality (lint, vet, staticcheck, fmt, coverage)                         |
 | `make list`      | List all discovered utilities                                                     |
 | `make install`   | Install binaries to user-local bin directory (configurable with `INSTALL_PREFIX`) |
 | `make uninstall` | Remove binaries from installation directory                                       |

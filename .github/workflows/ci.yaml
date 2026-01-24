@@ -14,6 +14,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
       - name: Setup Go ${{ matrix.go-version }}
         uses: actions/setup-go@v5
         with:
@@ -28,10 +30,11 @@ jobs:
 
       - name: Test
         run: |
-          make all
-          make fmt
-          make test
-          make coverage
+          go install honnef.co/go/tools/cmd/staticcheck@latest
+          staticcheck ./...
+          go fmt ./...
+          go vet ./...
+          go test -race -coverprofile=coverage.txt -covermode=atomic ./...
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5

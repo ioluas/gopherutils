@@ -62,7 +62,7 @@ check_coverage() {
 
 echo "Running pre-push hook..."
 
-# Run CQ target (lint, fmt, coverage)
+# Run CQ target (lint, vet, staticcheck, fmt, coverage)
 if ! make CQ; then
     echo "make CQ failed. Push aborted."
     exit 1
