@@ -12,11 +12,8 @@ jobs:
       matrix:
         include:
           - go-version: '1.23.x'
-            staticcheck-version: v0.5.1
           - go-version: '1.24.x'
-            staticcheck-version: v0.5.1
           - go-version: '1.25.x'
-            staticcheck-version: v0.6.1
 
     steps:
       - uses: actions/checkout@v5
@@ -36,10 +33,14 @@ jobs:
 
       - name: Test
         run: |
-          go install honnef.co/go/tools/cmd/staticcheck@${{ matrix.staticcheck-version }}
           go fmt ./...
           go vet ./...
           go test -race -coverprofile=coverage.txt -covermode=atomic ./...
+
+      - name: staticcheck
+        if: ${{ matrix.go-version == '1.25.x' }}
+        run: |
+          go install honnef.co/go/tools/cmd/staticcheck@v0.6.1
           $(go env GOPATH)/bin/staticcheck ./...
 
       - name: Upload coverage reports to Codecov
