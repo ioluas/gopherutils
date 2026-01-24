@@ -54,13 +54,18 @@ type Config struct {
 }
 
 func main() {
-	config, err := ParseArgs(os.Args[1:])
+	os.Exit(Execute(os.Args[1:], os.Stdout, os.Stderr))
+}
+
+// Execute is the entry point for the ls utility, extracted from main for testing.
+func Execute(args []string, stdout, stderr io.Writer) int {
+	config, err := ParseArgs(args, stderr)
 	if err != nil {
 		if errors.Is(err, pflag.ErrHelp) {
-			os.Exit(0)
+			return 0
 		}
-		_, _ = fmt.Fprintf(os.Stderr, "ls: %v\n", err)
-		os.Exit(1)
+		_, _ = fmt.Fprintf(stderr, "ls: %v\n", err)
+		return 1
 	}
 
 	exitCode := 0
@@ -68,21 +73,21 @@ func main() {
 		// Print directory name if multiple directories are listed
 		if len(config.Directories) > 1 {
 			if i > 0 {
-				_, _ = fmt.Fprintln(os.Stdout) // Blank line between directory listings
+				_, _ = fmt.Fprintln(stdout) // Blank line between directory listings
 			}
-			_, _ = fmt.Fprintf(os.Stdout, "%s:\n", dir)
+			_, _ = fmt.Fprintf(stdout, "%s:\n", dir)
 		}
 
-		currentExitCode := run(dir, config, os.Stdout, os.Stderr)
+		currentExitCode := run(dir, config, stdout, stderr)
 		if currentExitCode != 0 {
 			exitCode = currentExitCode
 		}
 	}
-	os.Exit(exitCode)
+	return exitCode
 }
 
 // ParseArgs parses command-line arguments using pflag and returns a Config.
-func ParseArgs(args []string) (*Config, error) {
+func ParseArgs(args []string, stderr io.Writer) (*Config, error) {
 	config := &Config{}
 	var showHelp bool
 
@@ -108,10 +113,10 @@ func ParseArgs(args []string) (*Config, error) {
 
 	if err != nil {
 		if errors.Is(err, pflag.ErrHelp) {
-			flagSet.SetOutput(os.Stderr)
-			_, _ = fmt.Fprintf(os.Stderr, "Usage: ls [OPTION]... [FILE]...\n")
-			_, _ = fmt.Fprintf(os.Stderr, "List information about the FILEs (the current directory by default).\n\n")
-			_, _ = fmt.Fprintf(os.Stderr, "Options:\n")
+			flagSet.SetOutput(stderr)
+			_, _ = fmt.Fprintf(stderr, "Usage: ls [OPTION]... [FILE]...\n")
+			_, _ = fmt.Fprintf(stderr, "List information about the FILEs (the current directory by default).\n\n")
+			_, _ = fmt.Fprintf(stderr, "Options:\n")
 			flagSet.PrintDefaults()
 			return nil, pflag.ErrHelp
 		}

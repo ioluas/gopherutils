@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"os/user"
@@ -274,7 +275,7 @@ func TestParseArgs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(innerT *testing.T) { // Changed 't' to 'innerT'
-			config, err := ParseArgs(tt.args)
+			config, err := ParseArgs(tt.args, io.Discard)
 
 			if tt.expectError {
 				if err == nil {
@@ -330,7 +331,7 @@ func TestParseArgsLong(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			config, err := ParseArgs(tt.args)
+			config, err := ParseArgs(tt.args, io.Discard)
 			if err != nil {
 				t.Fatalf("Unexpected error: %v", err)
 			}
@@ -503,9 +504,15 @@ func TestRun(t *testing.T) {
 			name: "list directory with dotfiles - no flags",
 			setupFunc: func(t *testing.T) string {
 				tmpDir := t.TempDir()
-				os.WriteFile(filepath.Join(tmpDir, "file1.txt"), []byte(""), 0644)
-				os.WriteFile(filepath.Join(tmpDir, ".dotfile.txt"), []byte(""), 0644)
-				os.Mkdir(filepath.Join(tmpDir, "subdir"), 0755)
+				if err := os.WriteFile(filepath.Join(tmpDir, "file1.txt"), []byte(""), 0644); err != nil {
+					t.Fatalf("failed to create file1.txt: %v", err)
+				}
+				if err := os.WriteFile(filepath.Join(tmpDir, ".dotfile.txt"), []byte(""), 0644); err != nil {
+					t.Fatalf("failed to create .dotfile.txt: %v", err)
+				}
+				if err := os.Mkdir(filepath.Join(tmpDir, "subdir"), 0755); err != nil {
+					t.Fatalf("failed to create subdir: %v", err)
+				}
 				return tmpDir
 			},
 			config:         &Config{ShowAll: false, ShowAlmostAll: false}, // Explicitly set to make test clear
@@ -517,9 +524,15 @@ func TestRun(t *testing.T) {
 			name: "list directory with dotfiles -a flag",
 			setupFunc: func(t *testing.T) string {
 				tmpDir := t.TempDir()
-				os.WriteFile(filepath.Join(tmpDir, "file1.txt"), []byte(""), 0644)
-				os.WriteFile(filepath.Join(tmpDir, ".dotfile.txt"), []byte(""), 0644)
-				os.Mkdir(filepath.Join(tmpDir, "subdir"), 0755)
+				if err := os.WriteFile(filepath.Join(tmpDir, "file1.txt"), []byte(""), 0644); err != nil {
+					t.Fatalf("failed to create file1.txt: %v", err)
+				}
+				if err := os.WriteFile(filepath.Join(tmpDir, ".dotfile.txt"), []byte(""), 0644); err != nil {
+					t.Fatalf("failed to create .dotfile.txt: %v", err)
+				}
+				if err := os.Mkdir(filepath.Join(tmpDir, "subdir"), 0755); err != nil {
+					t.Fatalf("failed to create subdir: %v", err)
+				}
 				return tmpDir
 			},
 			config:         &Config{ShowAll: true, ShowAlmostAll: false},
@@ -531,9 +544,15 @@ func TestRun(t *testing.T) {
 			name: "list directory with dotfiles -A flag",
 			setupFunc: func(t *testing.T) string {
 				tmpDir := t.TempDir()
-				os.WriteFile(filepath.Join(tmpDir, "file1.txt"), []byte(""), 0644)
-				os.WriteFile(filepath.Join(tmpDir, ".dotfile.txt"), []byte(""), 0644)
-				os.Mkdir(filepath.Join(tmpDir, "subdir"), 0755)
+				if err := os.WriteFile(filepath.Join(tmpDir, "file1.txt"), []byte(""), 0644); err != nil {
+					t.Fatalf("failed to create file1.txt: %v", err)
+				}
+				if err := os.WriteFile(filepath.Join(tmpDir, ".dotfile.txt"), []byte(""), 0644); err != nil {
+					t.Fatalf("failed to create .dotfile.txt: %v", err)
+				}
+				if err := os.Mkdir(filepath.Join(tmpDir, "subdir"), 0755); err != nil {
+					t.Fatalf("failed to create subdir: %v", err)
+				}
 				return tmpDir
 			},
 			config:         &Config{ShowAll: false, ShowAlmostAll: true},
@@ -545,9 +564,15 @@ func TestRun(t *testing.T) {
 			name: "list directory with dotfiles -a -A flags (a should take precedence)",
 			setupFunc: func(t *testing.T) string {
 				tmpDir := t.TempDir()
-				os.WriteFile(filepath.Join(tmpDir, "file1.txt"), []byte(""), 0644)
-				os.WriteFile(filepath.Join(tmpDir, ".dotfile.txt"), []byte(""), 0644)
-				os.Mkdir(filepath.Join(tmpDir, "subdir"), 0755)
+				if err := os.WriteFile(filepath.Join(tmpDir, "file1.txt"), []byte(""), 0644); err != nil {
+					t.Fatalf("failed to create file1.txt: %v", err)
+				}
+				if err := os.WriteFile(filepath.Join(tmpDir, ".dotfile.txt"), []byte(""), 0644); err != nil {
+					t.Fatalf("failed to create .dotfile.txt: %v", err)
+				}
+				if err := os.Mkdir(filepath.Join(tmpDir, "subdir"), 0755); err != nil {
+					t.Fatalf("failed to create subdir: %v", err)
+				}
 				return tmpDir
 			},
 			config:         &Config{ShowAll: true, ShowAlmostAll: true}, // ShowAll takes precedence
@@ -563,7 +588,9 @@ func TestRun(t *testing.T) {
 			},
 			setupFunc: func(t *testing.T) string {
 				tmpDir := t.TempDir()
-				os.WriteFile(filepath.Join(tmpDir, "file1.txt"), []byte(""), 0644)
+				if err := os.WriteFile(filepath.Join(tmpDir, "file1.txt"), []byte(""), 0644); err != nil {
+					t.Fatalf("failed to create file1.txt: %v", err)
+				}
 				return tmpDir
 			},
 			expectedExit:   0,
@@ -578,7 +605,9 @@ func TestRun(t *testing.T) {
 			},
 			setupFunc: func(t *testing.T) string {
 				tmpDir := t.TempDir()
-				os.WriteFile(filepath.Join(tmpDir, "file1.txt"), []byte(""), 0644)
+				if err := os.WriteFile(filepath.Join(tmpDir, "file1.txt"), []byte(""), 0644); err != nil {
+					t.Fatalf("failed to create file1.txt: %v", err)
+				}
 				return tmpDir
 			},
 			expectedExit: 0,
@@ -596,7 +625,9 @@ func TestRun(t *testing.T) {
 			},
 			setupFunc: func(t *testing.T) string {
 				tmpDir := t.TempDir()
-				os.WriteFile(filepath.Join(tmpDir, "file1.txt"), []byte(""), 0644)
+				if err := os.WriteFile(filepath.Join(tmpDir, "file1.txt"), []byte(""), 0644); err != nil {
+					t.Fatalf("failed to create file1.txt: %v", err)
+				}
 				return tmpDir
 			},
 			expectedExit: 0,
@@ -794,7 +825,11 @@ func getFileDetails(t *testing.T, filename string, owner, group string, showAuth
 	if err := os.WriteFile(filePath, []byte(""), 0644); err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer os.RemoveAll(tmpDir) // Clean up the temp directory after the test
+	defer func() {
+		if err := os.RemoveAll(tmpDir); err != nil {
+			t.Errorf("Failed to remove temp directory: %v", err)
+		}
+	}()
 
 	info, err := os.Stat(filePath)
 	if err != nil {
@@ -909,7 +944,9 @@ func TestDirEntryWrapper(t *testing.T) {
 
 func TestPrintLongListWithShowAll(t *testing.T) {
 	tmpDir := t.TempDir()
-	os.WriteFile(filepath.Join(tmpDir, "file1.txt"), []byte(""), 0644)
+	if err := os.WriteFile(filepath.Join(tmpDir, "file1.txt"), []byte(""), 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
 
 	config := &Config{
 		LongListing: true,
@@ -962,16 +999,16 @@ func TestPrintGridEdgeCases(t *testing.T) {
 			expected: "",
 		},
 		{
-			name:     "zero width",
-			entries:  []string{"a", "b"},
-			width:    0,
+			name:    "zero width",
+			entries: []string{"a", "b"},
+			width:   0,
 			// When width is 0, colWidth becomes 1, numCols becomes 1, so output is "a\nb\n"
 			expected: "a\nb\n",
 		},
 		{
-			name:     "very narrow width",
-			entries:  []string{"a", "b", "c"},
-			width:    1,
+			name:    "very narrow width",
+			entries: []string{"a", "b", "c"},
+			width:   1,
 			// When width is 1, colWidth becomes 1, numCols becomes 1, so output is "a\nb\nc\n"
 			expected: "a\nb\nc\n",
 		},
@@ -988,9 +1025,9 @@ func TestPrintGridEdgeCases(t *testing.T) {
 			expected: "verylongfilename1  verylongfilename2  verylongfilename3  \n",
 		},
 		{
-			name:     "mixed length names",
-			entries:  []string{"a", "verylongname", "b", "c"},
-			width:    80,
+			name:    "mixed length names",
+			entries: []string{"a", "verylongname", "b", "c"},
+			width:   80,
 			// maxLen=12, colWidth=14, numCols=80/14=5, but limited to 4 entries, so numCols=4, numRows=1
 			// All 4 entries fit in one row: "a             verylongname  b             c             \n"
 			expected: "a             verylongname  b             c             \n",
@@ -1020,7 +1057,9 @@ func TestPrintLongListEmpty(t *testing.T) {
 
 func TestPrintLongListWithoutAuthor(t *testing.T) {
 	tmpDir := t.TempDir()
-	os.WriteFile(filepath.Join(tmpDir, "file1.txt"), []byte("test"), 0644)
+	if err := os.WriteFile(filepath.Join(tmpDir, "file1.txt"), []byte("test"), 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
 
 	config := &Config{
 		LongListing: true,
@@ -1100,7 +1139,7 @@ func TestParseArgsErrorCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			config, err := ParseArgs(tt.args)
+			config, err := ParseArgs(tt.args, io.Discard)
 			if tt.expectError {
 				if err == nil {
 					t.Error("Expected error but got none")
@@ -1126,8 +1165,12 @@ func TestPrintEntriesEmpty(t *testing.T) {
 func TestRunMultipleDirectories(t *testing.T) {
 	tmpDir1 := t.TempDir()
 	tmpDir2 := t.TempDir()
-	os.WriteFile(filepath.Join(tmpDir1, "file1.txt"), []byte(""), 0644)
-	os.WriteFile(filepath.Join(tmpDir2, "file2.txt"), []byte(""), 0644)
+	if err := os.WriteFile(filepath.Join(tmpDir1, "file1.txt"), []byte(""), 0644); err != nil {
+		t.Fatalf("failed to create test file in tmpDir1: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir2, "file2.txt"), []byte(""), 0644); err != nil {
+		t.Fatalf("failed to create test file in tmpDir2: %v", err)
+	}
 
 	config := &Config{
 		Directories: []string{tmpDir1, tmpDir2},
@@ -1153,11 +1196,87 @@ func TestRunMultipleDirectories(t *testing.T) {
 	}
 }
 
+func TestExecute(t *testing.T) {
+	tmpDir1 := t.TempDir()
+	tmpDir2 := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmpDir1, "f1.txt"), []byte(""), 0644); err != nil {
+		t.Fatalf("failed to create f1.txt: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpDir2, "f2.txt"), []byte(""), 0644); err != nil {
+		t.Fatalf("failed to create f2.txt: %v", err)
+	}
+
+	tests := []struct {
+		name           string
+		args           []string
+		expectedExit   int
+		expectedStdout string
+		expectedStderr string
+	}{
+		{
+			name:           "success - single dir",
+			args:           []string{tmpDir1},
+			expectedExit:   0,
+			expectedStdout: "f1.txt\n",
+			expectedStderr: "",
+		},
+		{
+			name:           "success - multiple dirs",
+			args:           []string{tmpDir1, tmpDir2},
+			expectedExit:   0,
+			expectedStdout: fmt.Sprintf("%s:\nf1.txt\n\n%s:\nf2.txt\n", tmpDir1, tmpDir2),
+			expectedStderr: "",
+		},
+		{
+			name:           "invalid flag",
+			args:           []string{"--invalid-flag"},
+			expectedExit:   1,
+			expectedStdout: "",
+			expectedStderr: "ls: unknown flag: --invalid-flag\n",
+		},
+		{
+			name:           "help flag",
+			args:           []string{"--help"},
+			expectedExit:   0,
+			expectedStdout: "",
+			expectedStderr: "Usage: ls [OPTION]... [FILE]...",
+		},
+		{
+			name:           "non-existent directory",
+			args:           []string{"/path/does/not/exist"},
+			expectedExit:   2,
+			expectedStdout: "",
+			expectedStderr: "ls: cannot access '/path/does/not/exist':",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			exitCode := Execute(tt.args, &stdout, &stderr)
+
+			if exitCode != tt.expectedExit {
+				t.Errorf("Execute() exitCode = %v, want %v", exitCode, tt.expectedExit)
+			}
+
+			if tt.expectedStdout != "" && !strings.Contains(stdout.String(), tt.expectedStdout) {
+				t.Errorf("Execute() stdout = %q, want to contain %q", stdout.String(), tt.expectedStdout)
+			}
+
+			if tt.expectedStderr != "" && !strings.Contains(stderr.String(), tt.expectedStderr) {
+				t.Errorf("Execute() stderr = %q, want to contain %q", stderr.String(), tt.expectedStderr)
+			}
+		})
+	}
+}
+
 func TestPrintLongListWithHumanReadable(t *testing.T) {
 	tmpDir := t.TempDir()
 	// Create a file with a specific size to test human-readable format
 	testContent := make([]byte, 2048) // 2KB
-	os.WriteFile(filepath.Join(tmpDir, "testfile.txt"), testContent, 0644)
+	if err := os.WriteFile(filepath.Join(tmpDir, "testfile.txt"), testContent, 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
 
 	config := &Config{
 		LongListing:   true,
@@ -1176,4 +1295,3 @@ func TestPrintLongListWithHumanReadable(t *testing.T) {
 		t.Errorf("Expected output to contain human-readable size or filename, got: %q", output)
 	}
 }
-
