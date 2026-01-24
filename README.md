@@ -76,7 +76,7 @@ Personal project to implement Linux coreutils in Go.
 | `sha512sum` | SHA-512 checksum                |               | &#10007; |
 
 
-## Shel Utilities
+## Shell Utilities
 
 | Command   | Description                 | Documentation | Status   |
 |-----------|-----------------------------|---------------|:---------|
@@ -166,20 +166,20 @@ Personal project to implement Linux coreutils in Go.
 
 This project uses a `Makefile` to manage builds, testing, and quality control.
 
-| Target      | Description                                      |
-|-------------|--------------------------------------------------|
-| `make all`  | Build all utilities (default)                    |
-| `make deps` | Download and install Go dependencies             |
-| `make build`| Alias for `all`                                  |
-| `make clean`| Remove built binaries and test cache             |
-| `make test` | Run tests for all utilities                      |
-| `make coverage` | Run tests and generate coverage report       |
-| `make fmt`  | Format all Go code                               |
-| `make lint` | Lint all Go code                                 |
-| `make CQ`   | Run Code Quality (lint, fmt, coverage)           |
-| `make list` | List all discovered utilities                    |
-| `make install` | Install binaries to user-local bin directory (configurable with `INSTALL_PREFIX`) |
-| `make uninstall` | Remove binaries from installation directory |
-| `make help` | Show help message with all targets               |
+| Target           | Description                                                                       |
+|------------------|-----------------------------------------------------------------------------------|
+| `make all`       | Build all utilities (default)                                                     |
+| `make deps`      | Download and install Go dependencies                                              |
+| `make build`     | Alias for `all`                                                                   |
+| `make clean`     | Remove built binaries and test cache                                              |
+| `make test`      | Run tests for all utilities                                                       |
+| `make coverage`  | Run tests and generate coverage report                                            |
+| `make fmt`       | Format all Go code                                                                |
+| `make lint`      | Lint all Go code                                                                  |
+| `make CQ`        | Run Code Quality (lint, fmt, coverage)                                            |
+| `make list`      | List all discovered utilities                                                     |
+| `make install`   | Install binaries to user-local bin directory (configurable with `INSTALL_PREFIX`) |
+| `make uninstall` | Remove binaries from installation directory                                       |
+| `make help`      | Show help message with all targets                                                |
 
 

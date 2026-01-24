@@ -22,6 +22,7 @@ func TestParseArgs(t *testing.T) {
 		args        []string
 		expectError bool
 		checkConfig func(t *testing.T, config *Config)
+		setup       func() func()
 	}{
 		{
 			name:        "no arguments - use current directory",
@@ -40,6 +41,27 @@ func TestParseArgs(t *testing.T) {
 				}
 				if len(config.Directories) != 1 || config.Directories[0] != cwd {
 					t.Errorf("Expected directory %s, got %v", cwd, config.Directories)
+				}
+			},
+		},
+		{
+			name:        "Getwd error",
+			args:        []string{},
+			expectError: true,
+			setup: func() func() {
+				// We can't easily make os.Getwd() fail without mocking or changing environment
+				// But we can try to change to a directory that is then deleted?
+				// Actually, simpler to just skip this if it's too hard,
+				// or use a mock if we had one.
+				// Let's try to change to a directory and then delete it.
+				tmp := os.TempDir()
+				dir := filepath.Join(tmp, "getwd_error_test")
+				_ = os.Mkdir(dir, 0755)
+				oldCwd, _ := os.Getwd()
+				_ = os.Chdir(dir)
+				_ = os.Remove(dir)
+				return func() {
+					_ = os.Chdir(oldCwd)
 				}
 			},
 		},
@@ -346,6 +368,10 @@ func TestParseArgs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(innerT *testing.T) { // Changed 't' to 'innerT'
+			if tt.setup != nil {
+				cleanup := tt.setup()
+				defer cleanup()
+			}
 			config, err := ParseArgs(tt.args, io.Discard)
 
 			if tt.expectError {
@@ -787,6 +813,18 @@ func TestRun(t *testing.T) {
 			}(),
 			expectedStderr: "",
 		},
+		{
+			name: "ls -d on non-existent path",
+			config: &Config{
+				ListDirectory: true,
+			},
+			setupFunc: func(t *testing.T) string {
+				return "/path/that/does/not/exist/ls_d_test"
+			},
+			expectedExit:   2,
+			expectedStdout: "",
+			expectedStderr: "ls: cannot access '/path/that/does/not/exist/ls_d_test':",
+		},
 	}
 
 	for _, tt := range tests {
@@ -1080,6 +1118,25 @@ func TestDirEntryWrapper(t *testing.T) {
 	}
 	if info == nil {
 		t.Error("Expected Info() to return non-nil FileInfo")
+	}
+
+	// Test isRoot: true for Info()
+	rootWrapper := &dirEntryWrapper{name: tmpDir, dirPath: tmpDir, isRoot: true}
+	info, err = rootWrapper.Info()
+	if err != nil {
+		t.Errorf("Expected Info() for rootWrapper to succeed, got error: %v", err)
+	}
+	if info == nil || info.Name() != filepath.Base(tmpDir) {
+		t.Errorf("Expected Info() to return info for %s, got %v", tmpDir, info)
+	}
+
+	// Test IsDir and Type error paths
+	badWrapper := &dirEntryWrapper{name: "nonexistent", dirPath: "/nonexistent/path"}
+	if badWrapper.IsDir() {
+		t.Error("Expected IsDir() to be false for nonexistent path")
+	}
+	if badWrapper.Type() != 0 {
+		t.Errorf("Expected Type() to be 0 for nonexistent path, got %v", badWrapper.Type())
 	}
 
 	// Test ".." wrapper
@@ -1438,6 +1495,13 @@ func TestExecute(t *testing.T) {
 			expectedStderr: "",
 		},
 		{
+			name:           "multiple dirs with one failing",
+			args:           []string{tmpDir1, "/nonexistent/path"},
+			expectedExit:   2,
+			expectedStdout: fmt.Sprintf("%s:\nf1.txt\n", tmpDir1),
+			expectedStderr: "ls: cannot access '/nonexistent/path':",
+		},
+		{
 			name:           "invalid flag",
 			args:           []string{"--invalid-flag"},
 			expectedExit:   1,
@@ -1457,6 +1521,13 @@ func TestExecute(t *testing.T) {
 			expectedExit:   2,
 			expectedStdout: "",
 			expectedStderr: "ls: cannot access '/path/does/not/exist':",
+		},
+		{
+			name:           "ls -d with mixed paths (one non-existent)",
+			args:           []string{"-d", tmpDir1, "/nonexistent/path/for/ls/d"},
+			expectedExit:   2,
+			expectedStdout: tmpDir1,
+			expectedStderr: "ls: cannot access '/nonexistent/path/for/ls/d':",
 		},
 	}
 
@@ -1696,6 +1767,12 @@ func TestListDirectory(t *testing.T) {
 			config:         &Config{ListDirectory: true, LongListing: true},
 			expectedStdout: "drwxr-xr-x", // Just check prefix for mode
 		},
+		{
+			name:           "list directory itself with escape",
+			path:           subdir,
+			config:         &Config{ListDirectory: true, Escape: true},
+			expectedStdout: subdir + "\n",
+		},
 	}
 
 	for _, tt := range tests {
@@ -1714,5 +1791,50 @@ func TestListDirectory(t *testing.T) {
 				t.Errorf("Expected stdout NOT to contain 'file.txt', but it did: %q", got)
 			}
 		})
+	}
+}
+
+type mockTerminalWriter struct {
+	bytes.Buffer
+}
+
+func (m *mockTerminalWriter) Fd() uintptr {
+	return 1 // Typical stdout FD
+}
+
+func TestPrintEntriesTerminal(t *testing.T) {
+	// Mock terminal functions
+	oldIsTerminal := isTerminalFunc
+	oldGetTermSize := getTermSizeFunc
+	defer func() {
+		isTerminalFunc = oldIsTerminal
+		getTermSizeFunc = oldGetTermSize
+	}()
+
+	isTerminalFunc = func(fd int) bool {
+		return true
+	}
+	getTermSizeFunc = func(fd int) (int, int, error) {
+		return 80, 24, nil
+	}
+
+	w := &mockTerminalWriter{}
+	printEntries(w, []string{"a", "b", "c"})
+	output := w.String()
+	// Should be in grid format
+	if !strings.Contains(output, "a  b  c") {
+		t.Errorf("Expected output to be in grid format, got %q", output)
+	}
+
+	// Test error in GetSize
+	getTermSizeFunc = func(fd int) (int, int, error) {
+		return 0, 0, errors.New("size error")
+	}
+	w.Reset()
+	printEntries(w, []string{"a", "b", "c"})
+	output = w.String()
+	// Should fall back to one per line
+	if output != "a\nb\nc\n" {
+		t.Errorf("Expected fallback to one per line, got %q", output)
 	}
 }

@@ -197,6 +197,12 @@ func quoteName(name string) string {
 func run(path string, config *Config, stdout, stderr io.Writer) int {
 	if config.ListDirectory {
 		// List the directory itself, not its contents
+		// Check if the path exists first
+		if _, err := os.Lstat(path); err != nil {
+			_, _ = fmt.Fprintf(stderr, "ls: cannot access '%s': %v\n", path, err)
+			return 2
+		}
+
 		entry := &dirEntryWrapper{name: path, dirPath: path, isRoot: true}
 		entries := []os.DirEntry{entry}
 
@@ -430,11 +436,12 @@ func printEntries(w io.Writer, names []string) {
 	// Check if output is a terminal
 	var termWidth int
 	isTerminal := false
-	if f, ok := w.(*os.File); ok {
-		if term.IsTerminal(int(f.Fd())) {
-			w, _, err := term.GetSize(int(f.Fd()))
+	if f, ok := w.(interface{ Fd() uintptr }); ok {
+		fd := int(f.Fd())
+		if isTerminalFunc(fd) {
+			width, _, err := getTermSizeFunc(fd)
 			if err == nil {
-				termWidth = w
+				termWidth = width
 				isTerminal = true
 			}
 		}
@@ -448,6 +455,15 @@ func printEntries(w io.Writer, names []string) {
 			_, _ = fmt.Fprintln(w, name)
 		}
 	}
+}
+
+// For testing purposes
+var isTerminalFunc = func(fd int) bool {
+	return term.IsTerminal(fd)
+}
+
+var getTermSizeFunc = func(fd int) (width, height int, err error) {
+	return term.GetSize(fd)
 }
 
 // printGrid formats names into a grid that fits within width.
