@@ -7,6 +7,10 @@ UTILS_DIR := utils
 GO := go
 GOFLAGS := -ldflags="-s -w"
 
+# Installation prefix
+INSTALL_PREFIX ?= $(HOME)/.local
+BINDIR := $(INSTALL_PREFIX)/bin
+
 # Find all directories containing main.go files under utils/
 # We use 'shell' to find them.
 UTIL_DIRS := $(shell find $(UTILS_DIR) -name "main.go" -exec dirname {} \;)
@@ -42,23 +46,26 @@ endef
 # Generate detailed build rules for each utility
 $(foreach dir,$(UTIL_DIRS),$(eval $(call BUILD_RULE,$(dir))))
 
-# Clean built binaries
+# Clean built binaries and test cache
 .PHONY: clean
 clean:
 	@echo "Cleaning..."
 	@rm -rf $(BINARY_DIR)
+	@rm -rf coverage.txt
+	@$(GO) clean -testcache
 
-# Install binaries to system (requires sudo/root)
+# Install binaries to system
 .PHONY: install
 install: all
-	@echo "Installing to /usr/local/bin..."
-	@install -m 755 $(BINARIES) /usr/local/bin/
+	@echo "Installing to $(BINDIR)..."
+	@mkdir -p $(BINDIR)
+	@install -m 755 $(BINARIES) $(BINDIR)/
 
 # Uninstall binaries from system
 .PHONY: uninstall
 uninstall:
-	@echo "Uninstalling from /usr/local/bin..."
-	@rm -f $(foreach bin,$(BINARIES),/usr/local/bin/$(notdir $(bin)))
+	@echo "Uninstalling from $(BINDIR)..."
+	@rm -f $(foreach bin,$(BINARIES),$(BINDIR)/$(notdir $(bin)))
 
 # List all discovered utilities
 .PHONY: list
@@ -101,16 +108,16 @@ help:
 	@echo "gopherutils - Linux coreutils in Go"
 	@echo ""
 	@echo "Targets:"
-	@echo "  all        - Build all utilities (default)"
-	@echo "  build      - Alias for all"
-	@echo "  deps       - Download and install Go dependencies"
-	@echo "  clean      - Remove built binaries"
-	@echo "  install    - Install binaries to /usr/local/bin"
-	@echo "  uninstall  - Remove binaries from /usr/local/bin"
-	@echo "  list       - List all discovered utilities"
-	@echo "  test       - Run tests"
-	@echo "  coverage   - Run tests with coverage and generate report"
-	@echo "  fmt        - Format Go code"
-	@echo "  lint       - Lint Go code"
-	@echo "  CQ         - Run lint, fmt, and coverage"
-	@echo "  help       - Show this help message"
+	@echo "  all          - Build all utilities (default)"
+	@echo "  build        - Alias for all"
+	@echo "  deps         - Download and install Go dependencies"
+	@echo "  clean        - Remove built binaries"
+	@echo "  install      - Install binaries to $(BINDIR) (configurable with INSTALL_PREFIX)"
+	@echo "  uninstall    - Remove binaries from $(BINDIR)"
+	@echo "  list         - List all discovered utilities"
+	@echo "  test         - Run tests"
+	@echo "  coverage     - Run tests with coverage and generate report"
+	@echo "  fmt          - Format Go code"
+	@echo "  lint         - Lint Go code"
+	@echo "  CQ           - Run lint, fmt, and coverage"
+	@echo "  help         - Show this help message"
