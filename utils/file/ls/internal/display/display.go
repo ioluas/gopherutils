@@ -304,6 +304,9 @@ func PrintGrid(w io.Writer, names []string, width int) {
 	// ceil(len(names) / numCols)
 	numRows := (len(names) + numCols - 1) / numCols
 
+	// Pre-compute format string as colWidth is constant for all entries
+	format := fmt.Sprintf("%%-%ds", colWidth)
+
 	// 4. Print in column-major order
 	// row 0:  idx 0,                idx 0+rows,            idx 0+2*rows...
 	// row r:  idx r,                idx r+rows,            ...
@@ -311,8 +314,6 @@ func PrintGrid(w io.Writer, names []string, width int) {
 		for c := 0; c < numCols; c++ {
 			idx := c*numRows + r
 			if idx < len(names) {
-				// Calculate padding for alignment
-				format := fmt.Sprintf("%%-%ds", colWidth)
 				_, _ = fmt.Fprintf(w, format, names[idx])
 			}
 		}

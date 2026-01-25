@@ -62,7 +62,7 @@ func run(path string, config *config.Config, stdout, stderr io.Writer) int {
 			return 2
 		}
 
-		entry := entry.NewCachedDirEntry(&entry.DirEntryWrapper{EntryName: path, DirPath: path, IsRoot: true}, info)
+		entry := entry.NewCachedDirEntry(entry.NewDirEntryWrapper(path, path, true, info, nil), info)
 		entries := []os.DirEntry{entry}
 
 		if config.LongListing {
@@ -89,8 +89,8 @@ func run(path string, config *config.Config, stdout, stderr io.Writer) int {
 
 	// If ShowAll is true, explicitly add "." and ".."
 	if config.ShowAll {
-		filtered = append(filtered, &entry.CachedDirEntry{DirEntry: &entry.DirEntryWrapper{EntryName: ".", DirPath: path}})
-		filtered = append(filtered, &entry.CachedDirEntry{DirEntry: &entry.DirEntryWrapper{EntryName: "..", DirPath: path}})
+		filtered = append(filtered, &entry.CachedDirEntry{DirEntry: entry.NewDirEntryWrapper(".", path, false, nil, nil)})
+		filtered = append(filtered, &entry.CachedDirEntry{DirEntry: entry.NewDirEntryWrapper("..", path, false, nil, nil)})
 	}
 
 	for _, dirEntry := range entries {
