@@ -131,8 +131,10 @@ func run(path string, config *config.Config, stdout, stderr io.Writer) int {
 			}
 			info, err := ce.Info()
 			if err != nil {
-				_, _ = fmt.Fprintf(stderr, "ls: cannot access '%s': %v\n", ce.Name(), err)
 				hadError = true
+				if !config.LongListing {
+					_, _ = fmt.Fprintf(stderr, "ls: cannot access '%s': %v\n", ce.Name(), err)
+				}
 				continue
 			}
 			t := timeutil.GetEntryTime(info, config.TimeField)

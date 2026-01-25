@@ -59,6 +59,12 @@ func PrintLongList(stdout, stderr io.Writer, entries []os.DirEntry, config *conf
 	details := make([]fileDetails, 0, len(entries))
 	var maxLinkLen, maxOwnerLen, maxAuthorLen, maxGroupLen, maxSizeLen int
 	for _, dirEntry := range entries {
+		if ce, ok := dirEntry.(*entry.CachedDirEntry); ok && ce.Err != nil {
+			_, _ = fmt.Fprintf(stderr, "ls: cannot access '%s': %v\n", ce.Name(), ce.Err)
+			hadError = true
+			continue
+		}
+
 		info, err := dirEntry.Info()
 		if err != nil {
 			_, _ = fmt.Fprintf(stderr, "ls: cannot access '%s': %v\n", dirEntry.Name(), err)

@@ -49,6 +49,7 @@ type CachedDirEntry struct {
 	os.DirEntry
 	info fs.FileInfo
 	Time *time.Time
+	Err  error
 }
 
 func NewCachedDirEntry(dirEntry os.DirEntry, info fs.FileInfo) *CachedDirEntry {
@@ -59,8 +60,12 @@ func (e *CachedDirEntry) Info() (fs.FileInfo, error) {
 	if e.info != nil {
 		return e.info, nil
 	}
+	if e.Err != nil {
+		return nil, e.Err
+	}
 	info, err := e.DirEntry.Info()
 	if err != nil {
+		e.Err = err
 		return nil, err
 	}
 	e.info = info

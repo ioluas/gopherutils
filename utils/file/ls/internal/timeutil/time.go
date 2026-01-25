@@ -162,8 +162,10 @@ func FormatTime(t time.Time, config *config.Config) string {
 	return t.Format(layout)
 }
 
+var NowFunc = time.Now
+
 func isRecentTime(t time.Time) bool {
-	now := time.Now()
+	now := NowFunc()
 	if t.After(now.Add(24 * time.Hour)) {
 		return false
 	}
