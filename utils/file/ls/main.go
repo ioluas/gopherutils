@@ -512,18 +512,21 @@ func parseBlockSize(raw string) (BlockSizeSpec, string, bool) {
 
 	var numStr string
 	var suffix string
+	nonDigitIdx := -1
 	for i := 0; i < len(trimmed); i++ {
 		if trimmed[i] < '0' || trimmed[i] > '9' {
-			numStr = trimmed[:i]
-			suffix = trimmed[i:]
+			nonDigitIdx = i
 			break
 		}
 	}
-	if numStr == "" && suffix == "" {
+	switch {
+	case nonDigitIdx == -1:
 		numStr = trimmed
-	}
-	if suffix == "" && numStr != trimmed {
-		suffix = trimmed[len(numStr):]
+	case nonDigitIdx == 0:
+		suffix = trimmed
+	default:
+		numStr = trimmed[:nonDigitIdx]
+		suffix = trimmed[nonDigitIdx:]
 	}
 
 	var num uint64

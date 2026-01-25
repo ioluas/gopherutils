@@ -46,6 +46,15 @@ func TestParseBlockSize(t *testing.T) {
 			expectGrouping: true,
 		},
 		{
+			name:          "numeric suffix",
+			raw:           "1K",
+			expectOK:      true,
+			expectMode:    blockSizeModeBytes,
+			expectSize:    1024,
+			expectSuffix:  "K",
+			expectShowSuf: false,
+		},
+		{
 			name:           "suffix only implies one",
 			raw:            "kB",
 			expectOK:       true,
@@ -253,6 +262,7 @@ func TestGroupThousands(t *testing.T) {
 		expected string
 	}{
 		{input: "1", expected: "1"},
+		{input: "123456", expected: "123,456"},
 		{input: "1234", expected: "1,234"},
 		{input: "1234567", expected: "1,234,567"},
 	}
