@@ -185,6 +185,32 @@ func TestParseArgs(t *testing.T) {
 			},
 		},
 		{
+			name:        "-G flag only",
+			args:        []string{"-G"},
+			expectError: false,
+			checkConfig: func(t *testing.T, config *Config) {
+				if !config.NoGroup {
+					t.Error("Expected NoGroup to be true")
+				}
+				if config.LongListing {
+					t.Error("Expected LongListing to be false")
+				}
+			},
+		},
+		{
+			name:        "--no-group flag only",
+			args:        []string{"--no-group"},
+			expectError: false,
+			checkConfig: func(t *testing.T, config *Config) {
+				if !config.NoGroup {
+					t.Error("Expected NoGroup to be true")
+				}
+				if config.LongListing {
+					t.Error("Expected LongListing to be false")
+				}
+			},
+		},
+		{
 			name:        "-l --author flags",
 			args:        []string{"-l", "--author"},
 			expectError: false,
@@ -416,6 +442,39 @@ func TestParseArgsLong(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestParseArgsBlockSize(t *testing.T) {
+	t.Run("valid block size", func(t *testing.T) {
+		var stderr bytes.Buffer
+		config, err := ParseArgs([]string{"--block-size=1K", "-l"}, &stderr)
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+		if config.BlockSize == nil {
+			t.Fatal("Expected BlockSize to be set")
+		}
+		if config.BlockSize.sizeBytes != 1024 {
+			t.Errorf("Expected BlockSize sizeBytes=1024, got %d", config.BlockSize.sizeBytes)
+		}
+		if stderr.Len() != 0 {
+			t.Errorf("Expected no warnings, got %q", stderr.String())
+		}
+	})
+
+	t.Run("invalid block size warns and drops", func(t *testing.T) {
+		var stderr bytes.Buffer
+		config, err := ParseArgs([]string{"--block-size=1X", "-l"}, &stderr)
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+		if config.BlockSize != nil {
+			t.Fatal("Expected BlockSize to be nil for invalid size")
+		}
+		if !strings.Contains(stderr.String(), "unknown SIZE suffix") {
+			t.Errorf("Expected warning about unknown SIZE suffix, got %q", stderr.String())
+		}
+	})
 }
 
 func TestPrintEntries(t *testing.T) {
@@ -674,6 +733,26 @@ func TestRun(t *testing.T) {
 			expectedExit:   0,
 			expectedStdout: "",
 			expectedStderr: "ls: warning: options -h and --si are ignored when -l is not used",
+		},
+		{
+			name:   "--block-size without -l warns",
+			config: &Config{BlockSize: &BlockSizeSpec{mode: blockSizeModeBytes, sizeBytes: 1024}},
+			setupFunc: func(t *testing.T) string {
+				return t.TempDir()
+			},
+			expectedExit:   0,
+			expectedStdout: "",
+			expectedStderr: "ls: warning: option --block-size is ignored when -l is not used",
+		},
+		{
+			name:   "--no-group without -l warns",
+			config: &Config{NoGroup: true},
+			setupFunc: func(t *testing.T) string {
+				return t.TempDir()
+			},
+			expectedExit:   0,
+			expectedStdout: "",
+			expectedStderr: "ls: warning: --no-group is ignored when -l is not used",
 		},
 		{
 			name: "list directory with dotfiles - no flags",
@@ -1600,6 +1679,65 @@ func TestPrintLongListWithSI(t *testing.T) {
 	// Should contain SI size "2.0K" (because 2000 / 1000 = 2.0)
 	if !strings.Contains(output, "2.0K") {
 		t.Errorf("Expected output to contain '2.0K', got: %q", output)
+	}
+}
+
+func TestPrintLongListWithNoGroup(t *testing.T) {
+	tmpDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmpDir, "nogroup.txt"), []byte("test"), 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	config := &Config{
+		LongListing: true,
+		ShowAuthor:  true,
+		NoGroup:     true,
+	}
+
+	var buf bytes.Buffer
+	exitCode := run(tmpDir, config, &buf, &buf)
+	if exitCode != 0 {
+		t.Errorf("Expected exit code 0, got %d", exitCode)
+	}
+
+	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
+	if len(lines) == 0 {
+		t.Fatalf("Expected output, got empty")
+	}
+	fields := strings.Fields(lines[0])
+	if len(fields) != 8 {
+		t.Fatalf("Expected 8 fields (mode nlink owner size month day time name), got %d: %v", len(fields), fields)
+	}
+}
+
+func TestPrintLongListWithBlockSize(t *testing.T) {
+	tmpDir := t.TempDir()
+	testContent := make([]byte, 1500)
+	if err := os.WriteFile(filepath.Join(tmpDir, "blockfile.txt"), testContent, 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	config := &Config{
+		LongListing: true,
+		BlockSize:   &BlockSizeSpec{mode: blockSizeModeBytes, sizeBytes: 1024},
+	}
+
+	var buf bytes.Buffer
+	exitCode := run(tmpDir, config, &buf, &buf)
+	if exitCode != 0 {
+		t.Errorf("Expected exit code 0, got %d", exitCode)
+	}
+
+	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
+	if len(lines) == 0 {
+		t.Fatalf("Expected output, got empty")
+	}
+	fields := strings.Fields(lines[0])
+	if len(fields) < 6 {
+		t.Fatalf("Expected long listing fields, got %v", fields)
+	}
+	if fields[2] != "2" {
+		t.Errorf("Expected block size count 2, got %q", fields[2])
 	}
 }
 
