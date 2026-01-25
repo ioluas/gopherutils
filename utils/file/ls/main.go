@@ -61,6 +61,12 @@ type Config struct {
 	ShowAll       bool // -a: do not ignore entries starting with .
 	ShowAlmostAll bool // -A: do not list implied . and ..
 	LongListing   bool // -l: use a long listing format
+	SortTime      bool // -t: sort by time, newest first
+	TimeField     timeField
+	TimeFieldSet  bool
+	TimeStyleSet  bool
+	TimeStyleSpec *timeStyleSpec
+	FullTime      bool // --full-time: like --time-style=full-iso
 	HumanReadable bool // -h: with -l, print sizes in human readable format
 	SI            bool // --si: with -l, print sizes in powers of 1000 not 1024
 	ShowAuthor    bool // --author: with -l, print the author of each file
@@ -109,6 +115,8 @@ func ParseArgs(args []string, stderr io.Writer) (*Config, error) {
 	config := &Config{}
 	var showHelp bool
 	var blockSizeRaw string
+	var timeWord string
+	var timeStyleRaw string
 
 	// Create a new FlagSet for ls
 	flagSet := pflag.NewFlagSet("ls", pflag.ContinueOnError)
@@ -120,6 +128,10 @@ func ParseArgs(args []string, stderr io.Writer) (*Config, error) {
 	flagSet.BoolVarP(&config.ShowAll, "all", "a", false, "do not ignore entries starting with .")
 	flagSet.BoolVarP(&config.ShowAlmostAll, "almost-all", "A", false, "do not list implied . and ..")
 	flagSet.BoolVarP(&config.LongListing, "long", "l", false, "use a long listing format")
+	flagSet.BoolVarP(&config.SortTime, "sort-time", "t", false, "sort by time, newest first; see --time")
+	flagSet.StringVar(&timeWord, "time", "", "select which timestamp used to display or sort; access time (-u): atime, access, use; metadata change time (-c): ctime, status; modified time (default): mtime, modification; birth time: birth, creation")
+	flagSet.StringVar(&timeStyleRaw, "time-style", "", "time/date format with -l; see TIME_STYLE")
+	flagSet.BoolVar(&config.FullTime, "full-time", false, "like -l --time-style=full-iso")
 	flagSet.BoolVarP(&config.HumanReadable, "human-readable", "h", false, "with -l, print sizes in human readable format (e.g., 1K 234M 2G)")
 	flagSet.BoolVar(&config.SI, "si", false, "with -l, print sizes in powers of 1000 not 1024")
 	flagSet.BoolVar(&config.ShowAuthor, "author", false, "with -l, print the author of each file. Note: Due to OS/filesystem limitations, the author is typically the same as the owner.")
@@ -129,6 +141,8 @@ func ParseArgs(args []string, stderr io.Writer) (*Config, error) {
 	flagSet.BoolVarP(&config.ListDirectory, "directory", "d", false, "list directories themselves, not their contents")
 	flagSet.StringVar(&blockSizeRaw, "block-size", "", "with -l, scale sizes by SIZE when printing them; e.g., '--block-size=M'")
 	flagSet.BoolVarP(&showHelp, "help", "?", false, "display this help and exit")
+
+	_ = flagSet.MarkHidden("sort-time")
 
 	// Parse the arguments
 	err := flagSet.Parse(args)
@@ -161,6 +175,43 @@ func ParseArgs(args []string, stderr io.Writer) (*Config, error) {
 	} else {
 		// Use all remaining arguments as directories
 		config.Directories = remainingArgs
+	}
+
+	config.TimeField = timeFieldMod
+	if timeWord != "" {
+		field, err := parseTimeWord(timeWord)
+		if err != nil {
+			return nil, err
+		}
+		config.TimeField = field
+		config.TimeFieldSet = true
+	}
+
+	if timeStyleRaw == "" {
+		timeStyleRaw = os.Getenv("TIME_STYLE")
+	} else {
+		config.TimeStyleSet = true
+	}
+	if config.FullTime {
+		if config.TimeStyleSet {
+			_, _ = fmt.Fprintf(stderr, "ls: warning: --full-time is ignored when --time-style is used\n")
+		} else {
+			config.TimeStyleSet = true
+			timeStyleRaw = "full-iso"
+		}
+	}
+	if timeStyleRaw != "" {
+		spec, warnMsg, ok := parseTimeStyle(timeStyleRaw)
+		if warnMsg != "" {
+			prefix := "TIME_STYLE"
+			if config.TimeStyleSet {
+				prefix = "--time-style"
+			}
+			_, _ = fmt.Fprintf(stderr, "ls: warning: %s: %s\n", prefix, warnMsg)
+		}
+		if ok {
+			config.TimeStyleSpec = spec
+		}
 	}
 
 	if blockSizeRaw != "" {
@@ -275,10 +326,38 @@ func run(path string, config *Config, stdout, stderr io.Writer) int {
 		}
 	}
 
-	// Sort filtered entries by name for consistent output
-	sort.Slice(filtered, func(i, j int) bool {
-		return filtered[i].Name() < filtered[j].Name()
-	})
+	if config.SortTime {
+		type entryWithTime struct {
+			entry os.DirEntry
+			t     time.Time
+		}
+		entriesWithTime := make([]entryWithTime, 0, len(filtered))
+		for _, entry := range filtered {
+			info, err := entry.Info()
+			if err != nil {
+				continue
+			}
+			entriesWithTime = append(entriesWithTime, entryWithTime{
+				entry: entry,
+				t:     getEntryTime(info, config.TimeField),
+			})
+		}
+		sort.Slice(entriesWithTime, func(i, j int) bool {
+			if entriesWithTime[i].t.Equal(entriesWithTime[j].t) {
+				return entriesWithTime[i].entry.Name() < entriesWithTime[j].entry.Name()
+			}
+			return entriesWithTime[i].t.After(entriesWithTime[j].t)
+		})
+		filtered = make([]os.DirEntry, 0, len(entriesWithTime))
+		for _, item := range entriesWithTime {
+			filtered = append(filtered, item.entry)
+		}
+	} else {
+		// Sort filtered entries by name for consistent output
+		sort.Slice(filtered, func(i, j int) bool {
+			return filtered[i].Name() < filtered[j].Name()
+		})
+	}
 
 	// Warn if -h is used without -l
 	if (config.HumanReadable || config.SI) && !config.LongListing {
@@ -296,6 +375,24 @@ func run(path string, config *Config, stdout, stderr io.Writer) int {
 	// Warn if --block-size is used without -l
 	if config.BlockSize != nil && !config.LongListing {
 		_, _ = fmt.Fprintf(stderr, "ls: warning: option --block-size is ignored when -l is not used\n")
+	}
+
+	// Warn if --time is used without -l
+	if config.TimeFieldSet && !config.LongListing {
+		_, _ = fmt.Fprintf(stderr, "ls: warning: --time is ignored when -l is not used\n")
+		config.TimeField = timeFieldMod
+	}
+
+	// Warn if --time-style is used without -l
+	if config.TimeStyleSet && !config.LongListing {
+		_, _ = fmt.Fprintf(stderr, "ls: warning: --time-style is ignored when -l is not used\n")
+		config.TimeStyleSpec = nil
+	}
+
+	// Warn if --full-time is used without -l
+	if config.FullTime && !config.LongListing {
+		_, _ = fmt.Fprintf(stderr, "ls: warning: --full-time is ignored when -l is not used\n")
+		config.TimeStyleSpec = nil
 	}
 
 	// Warn if --no-group is used without -l
@@ -334,6 +431,7 @@ func printLongList(w io.Writer, entries []os.DirEntry, config *Config) {
 		mode    string
 		nlink   uint64
 		owner   string
+		author  string
 		group   string
 		sizeStr string
 		modTime time.Time
@@ -341,7 +439,7 @@ func printLongList(w io.Writer, entries []os.DirEntry, config *Config) {
 	}
 
 	details := make([]fileDetails, 0, len(entries))
-	var maxLinkLen, maxOwnerLen, maxGroupLen, maxSizeLen int
+	var maxLinkLen, maxOwnerLen, maxAuthorLen, maxGroupLen, maxSizeLen int
 	for _, entry := range entries {
 		info, err := entry.Info()
 		if err != nil {
@@ -351,21 +449,23 @@ func printLongList(w io.Writer, entries []os.DirEntry, config *Config) {
 		}
 
 		var nlink uint64 = 1
-		var owner, group string
+		var owner, group, author string
 		size := info.Size()
 
 		sysStat, ok := info.Sys().(*syscall.Stat_t)
 		if ok {
 			//goland:noinspection GoRedundantConversion
 			nlink = uint64(sysStat.Nlink)
+			owner, group = fsutil.GetOwnerGroup(sysStat)
 			if config.ShowAuthor {
-				owner, group = fsutil.GetOwnerGroup(sysStat)
+				author = owner
 			}
 		} else {
 			// Non-Unix fallback
+			owner = "-" // Placeholder for owner
+			group = "-" // Placeholder for group
 			if config.ShowAuthor {
-				owner = "-" // Placeholder for owner
-				group = "-" // Placeholder for group
+				author = "-"
 			}
 		}
 
@@ -389,9 +489,10 @@ func printLongList(w io.Writer, entries []os.DirEntry, config *Config) {
 			mode:    info.Mode().String(),
 			nlink:   nlink,
 			owner:   owner,
+			author:  author,
 			group:   group,
 			sizeStr: sizeStr,
-			modTime: info.ModTime(),
+			modTime: getEntryTime(info, config.TimeField),
 			name:    name,
 		}
 		details = append(details, d)
@@ -400,14 +501,17 @@ func printLongList(w io.Writer, entries []os.DirEntry, config *Config) {
 		if l := len(fmt.Sprint(d.nlink)); l > maxLinkLen {
 			maxLinkLen = l
 		}
+		if l := len(d.owner); l > maxOwnerLen {
+			maxOwnerLen = l
+		}
 		if config.ShowAuthor {
-			if l := len(d.owner); l > maxOwnerLen {
-				maxOwnerLen = l
+			if l := len(d.author); l > maxAuthorLen {
+				maxAuthorLen = l
 			}
-			if !config.NoGroup {
-				if l := len(d.group); l > maxGroupLen {
-					maxGroupLen = l
-				}
+		}
+		if !config.NoGroup {
+			if l := len(d.group); l > maxGroupLen {
+				maxGroupLen = l
 			}
 		}
 		if l := len(d.sizeStr); l > maxSizeLen {
@@ -423,34 +527,46 @@ func printLongList(w io.Writer, entries []os.DirEntry, config *Config) {
 	// Format: mode nlink owner group size date time name
 	// e.g. -rw-r--r-- 1 user group 123 Jan 01 12:00 file.txt
 	for _, d := range details {
-		if config.ShowAuthor {
-			if config.NoGroup {
-				_, _ = fmt.Fprintf(w, "%s %*d %-*s %*s %s %s\n",
-					d.mode,
-					maxLinkLen, d.nlink,
-					maxOwnerLen, d.owner,
-					maxSizeLen, d.sizeStr,
-					d.modTime.Format("Jan 02 15:04"),
-					d.name,
-				)
-			} else {
-				_, _ = fmt.Fprintf(w, "%s %*d %-*s %-*s %*s %s %s\n",
-					d.mode,
-					maxLinkLen, d.nlink,
-					maxOwnerLen, d.owner,
-					maxGroupLen, d.group,
-					maxSizeLen, d.sizeStr,
-					d.modTime.Format("Jan 02 15:04"),
-					d.name,
-				)
-			}
-		} else {
-			// Print without owner/group if --author is not specified
-			_, _ = fmt.Fprintf(w, "%s %*d %*s %s %s\n",
+		switch {
+		case config.ShowAuthor && config.NoGroup:
+			_, _ = fmt.Fprintf(w, "%s %*d %-*s %-*s %*s %s %s\n",
 				d.mode,
 				maxLinkLen, d.nlink,
+				maxOwnerLen, d.owner,
+				maxAuthorLen, d.author,
 				maxSizeLen, d.sizeStr,
-				d.modTime.Format("Jan 02 15:04"),
+				formatTime(d.modTime, config),
+				d.name,
+			)
+		case config.ShowAuthor:
+			_, _ = fmt.Fprintf(w, "%s %*d %-*s %-*s %-*s %*s %s %s\n",
+				d.mode,
+				maxLinkLen, d.nlink,
+				maxOwnerLen, d.owner,
+				maxAuthorLen, d.author,
+				maxGroupLen, d.group,
+				maxSizeLen, d.sizeStr,
+				formatTime(d.modTime, config),
+				d.name,
+			)
+		case config.NoGroup:
+			_, _ = fmt.Fprintf(w, "%s %*d %-*s %*s %s %s\n",
+				d.mode,
+				maxLinkLen, d.nlink,
+				maxOwnerLen, d.owner,
+				maxSizeLen, d.sizeStr,
+				formatTime(d.modTime, config),
+				d.name,
+			)
+		default:
+			// Print without author column.
+			_, _ = fmt.Fprintf(w, "%s %*d %-*s %-*s %*s %s %s\n",
+				d.mode,
+				maxLinkLen, d.nlink,
+				maxOwnerLen, d.owner,
+				maxGroupLen, d.group,
+				maxSizeLen, d.sizeStr,
+				formatTime(d.modTime, config),
 				d.name,
 			)
 		}
@@ -485,6 +601,219 @@ type BlockSizeSpec struct {
 	suffix         string
 	showSuffix     bool
 	groupThousands bool
+}
+
+type timeField int
+
+const (
+	timeFieldMod timeField = iota
+	timeFieldAccess
+	timeFieldChange
+	timeFieldBirth
+)
+
+func parseTimeWord(word string) (timeField, error) {
+	switch strings.ToLower(word) {
+	case "atime", "access", "use":
+		return timeFieldAccess, nil
+	case "ctime", "status":
+		return timeFieldChange, nil
+	case "mtime", "modification":
+		return timeFieldMod, nil
+	case "birth", "creation":
+		return timeFieldBirth, nil
+	default:
+		return timeFieldMod, fmt.Errorf("invalid --time value: %s", word)
+	}
+}
+
+type timeStyleKind int
+
+const (
+	timeStyleLocale timeStyleKind = iota
+	timeStyleFullISO
+	timeStyleLongISO
+	timeStyleISO
+	timeStyleCustom
+)
+
+type timeStyleSpec struct {
+	kind         timeStyleKind
+	recentLayout string
+	oldLayout    string
+}
+
+func parseTimeStyle(raw string) (*timeStyleSpec, string, bool) {
+	style := strings.TrimSpace(raw)
+	if style == "" {
+		return nil, "missing TIME_STYLE", false
+	}
+	if strings.HasPrefix(style, "posix-") {
+		if isPosixLocale() {
+			return nil, "", false
+		}
+		style = strings.TrimPrefix(style, "posix-")
+	}
+
+	switch style {
+	case "full-iso":
+		return &timeStyleSpec{
+			kind:         timeStyleFullISO,
+			recentLayout: "2006-01-02 15:04:05.000000000 -0700",
+		}, "", true
+	case "long-iso":
+		return &timeStyleSpec{
+			kind:         timeStyleLongISO,
+			recentLayout: "2006-01-02 15:04",
+		}, "", true
+	case "iso":
+		return &timeStyleSpec{
+			kind:         timeStyleISO,
+			recentLayout: "01-02 15:04",
+			oldLayout:    "2006-01-02",
+		}, "", true
+	case "locale":
+		return &timeStyleSpec{
+			kind:         timeStyleLocale,
+			recentLayout: "Jan 02 15:04",
+			oldLayout:    "Jan 02  2006",
+		}, "", true
+	default:
+		if strings.HasPrefix(style, "+") {
+			recent, old, warn, ok := parseTimeFormat(style[1:])
+			if !ok {
+				return nil, warn, false
+			}
+			return &timeStyleSpec{
+				kind:         timeStyleCustom,
+				recentLayout: recent,
+				oldLayout:    old,
+			}, warn, warn == ""
+		}
+		return nil, fmt.Sprintf("unknown TIME_STYLE %q", style), false
+	}
+}
+
+func parseTimeFormat(format string) (string, string, string, bool) {
+	if format == "" {
+		return "", "", "missing TIME_STYLE format", false
+	}
+	parts := strings.Split(format, "\n")
+	if len(parts) > 2 {
+		return "", "", "invalid TIME_STYLE format", false
+	}
+	recent, warn, ok := convertTimeFormat(parts[len(parts)-1])
+	if !ok {
+		return "", "", warn, false
+	}
+	old := ""
+	if len(parts) == 2 {
+		old, warn, ok = convertTimeFormat(parts[0])
+		if !ok {
+			return "", "", warn, false
+		}
+	}
+	return recent, old, "", true
+}
+
+func convertTimeFormat(format string) (string, string, bool) {
+	var b strings.Builder
+	for i := 0; i < len(format); i++ {
+		if format[i] != '%' {
+			b.WriteByte(format[i])
+			continue
+		}
+		if i+1 >= len(format) {
+			return "", "invalid TIME_STYLE format", false
+		}
+		i++
+		switch format[i] {
+		case '%':
+			b.WriteByte('%')
+		case 'Y':
+			b.WriteString("2006")
+		case 'y':
+			b.WriteString("06")
+		case 'm':
+			b.WriteString("01")
+		case 'd':
+			b.WriteString("02")
+		case 'e':
+			b.WriteString(" 2")
+		case 'H':
+			b.WriteString("15")
+		case 'M':
+			b.WriteString("04")
+		case 'S':
+			b.WriteString("05")
+		case 'b':
+			b.WriteString("Jan")
+		case 'B':
+			b.WriteString("January")
+		case 'a':
+			b.WriteString("Mon")
+		case 'Z':
+			b.WriteString("MST")
+		case 'z':
+			b.WriteString("-0700")
+		default:
+			return "", fmt.Sprintf("unsupported TIME_STYLE token %q", "%"+string(format[i])), false
+		}
+	}
+	return b.String(), "", true
+}
+
+func isPosixLocale() bool {
+	for _, key := range []string{"LC_ALL", "LC_TIME", "LANG"} {
+		if value := os.Getenv(key); value != "" {
+			return value == "C" || value == "POSIX"
+		}
+	}
+	return true
+}
+
+func formatTime(t time.Time, config *Config) string {
+	if config.TimeStyleSpec == nil {
+		return t.Format("Jan 02 15:04")
+	}
+	layout := config.TimeStyleSpec.recentLayout
+	if config.TimeStyleSpec.oldLayout != "" && !isRecentTime(t) {
+		layout = config.TimeStyleSpec.oldLayout
+	}
+	return t.Format(layout)
+}
+
+func isRecentTime(t time.Time) bool {
+	now := time.Now()
+	if t.After(now.Add(24 * time.Hour)) {
+		return false
+	}
+	return t.After(now.Add(-180 * 24 * time.Hour))
+}
+
+func getEntryTime(info fs.FileInfo, field timeField) time.Time {
+	if field == timeFieldMod {
+		return info.ModTime()
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return info.ModTime()
+	}
+	switch field {
+	case timeFieldAccess:
+		if t := statAtime(stat); !t.IsZero() {
+			return t
+		}
+	case timeFieldChange:
+		if t := statCtime(stat); !t.IsZero() {
+			return t
+		}
+	case timeFieldBirth:
+		if t, ok := statBirthtime(stat); ok && !t.IsZero() {
+			return t
+		}
+	}
+	return info.ModTime()
 }
 
 func parseBlockSize(raw string) (BlockSizeSpec, string, bool) {
