@@ -612,7 +612,10 @@ func TestPrintLongList(t *testing.T) {
 
 			stderr := new(bytes.Buffer)
 
-			PrintLongList(stdout, stderr, tt.entries, tt.config)
+			hadError := PrintLongList(stdout, stderr, tt.entries, tt.config)
+			if hadError {
+				t.Errorf("Test %s: Expected no error, but PrintLongList reported one", tt.name)
+			}
 
 			if actualStdout := stdout.String(); actualStdout != tt.expectedStdout {
 

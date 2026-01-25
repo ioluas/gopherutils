@@ -66,7 +66,9 @@ func run(path string, config *config.Config, stdout, stderr io.Writer) int {
 		entries := []os.DirEntry{entry}
 
 		if config.LongListing {
-			display.PrintLongList(stdout, stderr, entries, config)
+			if display.PrintLongList(stdout, stderr, entries, config) {
+				return 2
+			}
 		} else {
 			name := entry.Name()
 			if config.Escape {
@@ -119,6 +121,7 @@ func run(path string, config *config.Config, stdout, stderr io.Writer) int {
 		}
 	}
 
+	hadError := false
 	if config.SortTime {
 		for i, e := range filtered {
 			ce, ok := e.(*entry.CachedDirEntry)
@@ -128,6 +131,8 @@ func run(path string, config *config.Config, stdout, stderr io.Writer) int {
 			}
 			info, err := ce.Info()
 			if err != nil {
+				_, _ = fmt.Fprintf(stderr, "ls: cannot access '%s': %v\n", ce.Name(), err)
+				hadError = true
 				continue
 			}
 			t := timeutil.GetEntryTime(info, config.TimeField)
@@ -173,7 +178,9 @@ func run(path string, config *config.Config, stdout, stderr io.Writer) int {
 	}
 
 	if config.LongListing {
-		display.PrintLongList(stdout, stderr, filtered, config)
+		if display.PrintLongList(stdout, stderr, filtered, config) {
+			hadError = true
+		}
 	} else {
 		names := make([]string, len(filtered))
 		for i, e := range filtered {
@@ -184,6 +191,10 @@ func run(path string, config *config.Config, stdout, stderr io.Writer) int {
 			names[i] = name
 		}
 		display.PrintEntries(stdout, names)
+	}
+
+	if hadError {
+		return 2
 	}
 	return 0
 }

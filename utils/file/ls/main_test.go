@@ -608,7 +608,10 @@ func TestPrintLongListNonUnix(t *testing.T) {
 
 	config := &lsconfig.Config{LongListing: true, ShowAuthor: true}
 	var stdout, stderr bytes.Buffer
-	display.PrintLongList(&stdout, &stderr, mockEntries, config)
+	hadError := display.PrintLongList(&stdout, &stderr, mockEntries, config)
+	if hadError {
+		t.Error("Expected no error from PrintLongList, but got one")
+	}
 
 	output := stdout.String()
 	if output == "" {
@@ -631,7 +634,10 @@ func TestPrintLongListNonUnix(t *testing.T) {
 	// Test without author
 	stdout.Reset()
 	config.ShowAuthor = false
-	display.PrintLongList(&stdout, &stderr, mockEntries, config)
+	hadError = display.PrintLongList(&stdout, &stderr, mockEntries, config)
+	if hadError {
+		t.Error("Expected no error from PrintLongList on second call, but got one")
+	}
 	output = stdout.String()
 	// Format: mode nlink owner group size date time name (no author column)
 	fields := strings.Fields(output)
@@ -1210,7 +1216,10 @@ func TestPrintLongListErrors(t *testing.T) {
 	}
 
 	var stdout, stderr bytes.Buffer
-	display.PrintLongList(&stdout, &stderr, mockEntries, config)
+	hadError := display.PrintLongList(&stdout, &stderr, mockEntries, config)
+	if !hadError {
+		t.Error("Expected an error from PrintLongList, but got none")
+	}
 
 	// Since the "good-file" doesn't have proper Info, it will also be skipped.
 	// Only the error condition is what we are testing here.
@@ -1442,7 +1451,10 @@ func TestPrintGridEdgeCases(t *testing.T) {
 func TestPrintLongListEmpty(t *testing.T) {
 	config := &lsconfig.Config{LongListing: true}
 	var stdout, stderr bytes.Buffer
-	display.PrintLongList(&stdout, &stderr, []os.DirEntry{}, config)
+	hadError := display.PrintLongList(&stdout, &stderr, []os.DirEntry{}, config)
+	if hadError {
+		t.Error("Expected no error from PrintLongList with empty entries, but got one")
+	}
 	if stdout.String() != "" {
 		t.Errorf("Expected empty output for empty entries, got %q", stdout.String())
 	}

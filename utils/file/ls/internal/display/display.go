@@ -48,10 +48,12 @@ func QuoteName(name string) string {
 	return b.String()
 }
 
-func PrintLongList(stdout, stderr io.Writer, entries []os.DirEntry, config *config.Config) {
+func PrintLongList(stdout, stderr io.Writer, entries []os.DirEntry, config *config.Config) bool {
 	if len(entries) == 0 {
-		return
+		return false
 	}
+
+	var hadError bool
 
 	// Gather all file info
 	details := make([]fileDetails, 0, len(entries))
@@ -60,6 +62,7 @@ func PrintLongList(stdout, stderr io.Writer, entries []os.DirEntry, config *conf
 		info, err := dirEntry.Info()
 		if err != nil {
 			_, _ = fmt.Fprintf(stderr, "ls: cannot access '%s': %v\n", dirEntry.Name(), err)
+			hadError = true
 			continue
 		}
 
@@ -160,6 +163,7 @@ func PrintLongList(stdout, stderr io.Writer, entries []os.DirEntry, config *conf
 		format, args := longListFormatArgs(d, widths, config)
 		_, _ = fmt.Fprintf(stdout, format, args...)
 	}
+	return hadError
 }
 
 type fileDetails struct {
