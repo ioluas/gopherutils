@@ -190,7 +190,7 @@ func FormatSizeWithBlockSpec(size int64, spec config.BlockSizeSpec) string {
 func shouldGroupThousands() bool {
 	for _, envVar := range []string{"LC_ALL", "LC_NUMERIC", "LANG"} {
 		if locale := os.Getenv(envVar); locale != "" {
-			return !(locale == "C" || strings.HasPrefix(locale, "C.") || locale == "POSIX" || strings.HasPrefix(locale, "POSIX."))
+			return locale != "C" && !strings.HasPrefix(locale, "C.") && locale != "POSIX" && !strings.HasPrefix(locale, "POSIX.")
 		}
 	}
 	return false
