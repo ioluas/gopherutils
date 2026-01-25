@@ -1,6 +1,6 @@
 //go:build linux
 
-package main
+package timeutil
 
 import (
 	"syscall"
@@ -12,8 +12,8 @@ func TestStatTimeLinux(t *testing.T) {
 	atime := time.Unix(1, 2)
 	ctime := time.Unix(3, 4)
 	stat := &syscall.Stat_t{
-		Atim: syscall.Timespec{Sec: atime.Unix(), Nsec: int64(atime.Nanosecond())},
-		Ctim: syscall.Timespec{Sec: ctime.Unix(), Nsec: int64(ctime.Nanosecond())},
+		Atim: syscall.Timespec{Sec: int64(atime.Unix()), Nsec: int64(atime.Nanosecond())},
+		Ctim: syscall.Timespec{Sec: int64(ctime.Unix()), Nsec: int64(ctime.Nanosecond())},
 	}
 
 	if got := statAtime(stat); !got.Equal(atime) {

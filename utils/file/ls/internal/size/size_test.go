@@ -1,8 +1,10 @@
-package main
+package size
 
 import (
 	"strings"
 	"testing"
+
+	"github.com/ioluas/gopherutils/utils/file/ls/internal/config"
 )
 
 func TestParseBlockSize(t *testing.T) {
@@ -10,7 +12,7 @@ func TestParseBlockSize(t *testing.T) {
 		name           string
 		raw            string
 		expectOK       bool
-		expectMode     blockSizeMode
+		expectMode     config.BlockSizeMode
 		expectSize     int64
 		expectSuffix   string
 		expectShowSuf  bool
@@ -27,19 +29,19 @@ func TestParseBlockSize(t *testing.T) {
 			name:       "human readable",
 			raw:        "human-readable",
 			expectOK:   true,
-			expectMode: blockSizeModeHuman,
+			expectMode: config.BlockSizeModeHuman,
 		},
 		{
 			name:       "si",
 			raw:        "si",
 			expectOK:   true,
-			expectMode: blockSizeModeSI,
+			expectMode: config.BlockSizeModeSI,
 		},
 		{
 			name:           "grouping with suffix",
 			raw:            "'1kB",
 			expectOK:       true,
-			expectMode:     blockSizeModeBytes,
+			expectMode:     config.BlockSizeModeBytes,
 			expectSize:     1000,
 			expectSuffix:   "kB",
 			expectShowSuf:  false,
@@ -49,7 +51,7 @@ func TestParseBlockSize(t *testing.T) {
 			name:          "numeric suffix",
 			raw:           "1K",
 			expectOK:      true,
-			expectMode:    blockSizeModeBytes,
+			expectMode:    config.BlockSizeModeBytes,
 			expectSize:    1024,
 			expectSuffix:  "K",
 			expectShowSuf: false,
@@ -58,7 +60,7 @@ func TestParseBlockSize(t *testing.T) {
 			name:           "suffix only implies one",
 			raw:            "kB",
 			expectOK:       true,
-			expectMode:     blockSizeModeBytes,
+			expectMode:     config.BlockSizeModeBytes,
 			expectSize:     1000,
 			expectSuffix:   "kB",
 			expectShowSuf:  true,
@@ -98,7 +100,7 @@ func TestParseBlockSize(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, warn, ok := parseBlockSize(tt.raw)
+			got, warn, ok := ParseBlockSize(tt.raw)
 			if ok != tt.expectOK {
 				t.Fatalf("ok=%v, want %v (warn=%q)", ok, tt.expectOK, warn)
 			}
@@ -108,20 +110,20 @@ func TestParseBlockSize(t *testing.T) {
 			if !tt.expectOK {
 				return
 			}
-			if got.mode != tt.expectMode {
-				t.Errorf("mode=%v, want %v", got.mode, tt.expectMode)
+			if got.Mode != tt.expectMode {
+				t.Errorf("mode=%v, want %v", got.Mode, tt.expectMode)
 			}
-			if got.sizeBytes != tt.expectSize {
-				t.Errorf("sizeBytes=%d, want %d", got.sizeBytes, tt.expectSize)
+			if got.SizeBytes != tt.expectSize {
+				t.Errorf("sizeBytes=%d, want %d", got.SizeBytes, tt.expectSize)
 			}
-			if got.suffix != tt.expectSuffix {
-				t.Errorf("suffix=%q, want %q", got.suffix, tt.expectSuffix)
+			if got.Suffix != tt.expectSuffix {
+				t.Errorf("suffix=%q, want %q", got.Suffix, tt.expectSuffix)
 			}
-			if got.showSuffix != tt.expectShowSuf {
-				t.Errorf("showSuffix=%v, want %v", got.showSuffix, tt.expectShowSuf)
+			if got.ShowSuffix != tt.expectShowSuf {
+				t.Errorf("showSuffix=%v, want %v", got.ShowSuffix, tt.expectShowSuf)
 			}
-			if got.groupThousands != tt.expectGrouping {
-				t.Errorf("groupThousands=%v, want %v", got.groupThousands, tt.expectGrouping)
+			if got.GroupThousands != tt.expectGrouping {
+				t.Errorf("groupThousands=%v, want %v", got.GroupThousands, tt.expectGrouping)
 			}
 		})
 	}
@@ -142,7 +144,7 @@ func TestParseUintStrict(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := parseUintStrict(tt.input)
+			got, err := ParseUintStrict(tt.input)
 			if tt.expectOK {
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
@@ -186,55 +188,59 @@ func TestBlockSizeMultiplier(t *testing.T) {
 
 func TestFormatSizeWithBlockSpec(t *testing.T) {
 	t.Run("human", func(t *testing.T) {
-		spec := BlockSizeSpec{mode: blockSizeModeHuman}
-		if got := formatSizeWithBlockSpec(2048, spec); got != "2.0K" {
+		spec := config.BlockSizeSpec{Mode: config.BlockSizeModeHuman}
+		if got := FormatSizeWithBlockSpec(2048, spec); got != "2.0K" {
 			t.Fatalf("got %q, want %q", got, "2.0K")
 		}
 	})
 
 	t.Run("si", func(t *testing.T) {
-		spec := BlockSizeSpec{mode: blockSizeModeSI}
-		if got := formatSizeWithBlockSpec(2000, spec); got != "2.0K" {
+		spec := config.BlockSizeSpec{Mode: config.BlockSizeModeSI}
+		if got := FormatSizeWithBlockSpec(2000, spec); got != "2.0K" {
 			t.Fatalf("got %q, want %q", got, "2.0K")
 		}
 	})
 
 	t.Run("bytes rounding", func(t *testing.T) {
-		spec := BlockSizeSpec{mode: blockSizeModeBytes, sizeBytes: 1024}
-		if got := formatSizeWithBlockSpec(1500, spec); got != "2" {
+		spec := config.BlockSizeSpec{Mode: config.BlockSizeModeBytes, SizeBytes: 1024}
+		if got := FormatSizeWithBlockSpec(1500, spec); got != "2" {
 			t.Fatalf("got %q, want %q", got, "2")
 		}
 	})
 
 	t.Run("sizeBytes zero", func(t *testing.T) {
-		spec := BlockSizeSpec{mode: blockSizeModeBytes, sizeBytes: 0}
-		if got := formatSizeWithBlockSpec(1500, spec); got != "1500" {
+		spec := config.BlockSizeSpec{Mode: config.BlockSizeModeBytes, SizeBytes: 0}
+		if got := FormatSizeWithBlockSpec(1500, spec); got != "1500" {
 			t.Fatalf("got %q, want %q", got, "1500")
 		}
 	})
 
 	t.Run("grouping", func(t *testing.T) {
+		t.Setenv("LC_ALL", "")
+		t.Setenv("LANG", "")
 		t.Setenv("LC_NUMERIC", "en_US.UTF-8")
-		spec := BlockSizeSpec{mode: blockSizeModeBytes, sizeBytes: 1000, groupThousands: true}
-		if got := formatSizeWithBlockSpec(1234000, spec); got != "1,234" {
+		spec := config.BlockSizeSpec{Mode: config.BlockSizeModeBytes, SizeBytes: 1000, GroupThousands: true}
+		if got := FormatSizeWithBlockSpec(1234000, spec); got != "1,234" {
 			t.Fatalf("got %q, want %q", got, "1,234")
 		}
 	})
 
 	t.Run("show suffix", func(t *testing.T) {
-		spec := BlockSizeSpec{
-			mode:       blockSizeModeBytes,
-			sizeBytes:  1000,
-			suffix:     "kB",
-			showSuffix: true,
+		spec := config.BlockSizeSpec{
+			Mode:       config.BlockSizeModeBytes,
+			SizeBytes:  1000,
+			Suffix:     "kB",
+			ShowSuffix: true,
 		}
-		if got := formatSizeWithBlockSpec(3000, spec); got != "3kB" {
+		if got := FormatSizeWithBlockSpec(3000, spec); got != "3kB" {
 			t.Fatalf("got %q, want %q", got, "3kB")
 		}
 	})
 }
 
 func TestShouldGroupThousands(t *testing.T) {
+	t.Setenv("LC_ALL", "")
+	t.Setenv("LANG", "")
 	t.Setenv("LC_NUMERIC", "")
 	if shouldGroupThousands() {
 		t.Fatal("expected false when LC_NUMERIC is empty")
