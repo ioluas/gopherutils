@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
-name: codecov.yml
+name: Codecov
 on:
   push:
     branches:
@@ -12,6 +12,9 @@ permissions:
 jobs:
   cover:
     runs-on: ubuntu-latest
+    env:
+      GOMODCACHE: ${{ github.workspace }}/.cache/go-mod
+      GOCACHE: ${{ github.workspace }}/.cache/go-build
 
     steps:
       - name: Checkout
@@ -20,9 +23,20 @@ jobs:
           fetch-depth: 1
 
       - name: Setup go 1.25.x
+        id: setup-go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: 1.25.x
+
+      - name: Restore Go module and build cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ${{ env.GOMODCACHE }}
+            ${{ env.GOCACHE }}
+          key: go-${{ steps.setup-go.outputs.go-version }}-${{ runner.os }}-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            go-${{ steps.setup-go.outputs.go-version }}-${{ runner.os }}-
 
       - name: Run coverage
         run: go test -coverprofile=coverage.txt -covermode=atomic ./...
