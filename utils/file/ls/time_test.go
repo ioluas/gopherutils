@@ -351,6 +351,24 @@ func TestParseArgsTimeStyleEnv(t *testing.T) {
 	}
 }
 
+func TestParseArgsTimeStyleEnvInvalidWarns(t *testing.T) {
+	t.Setenv("TIME_STYLE", "+%Q")
+	var stderr bytes.Buffer
+
+	config, err := ParseArgs([]string{"-l"}, &stderr)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if config.TimeStyleSpec != nil {
+		t.Fatalf("expected TimeStyleSpec to be nil for invalid TIME_STYLE, got %#v", config.TimeStyleSpec)
+	}
+
+	out := stderr.String()
+	if !strings.Contains(out, "TIME_STYLE") || !strings.Contains(out, "unsupported TIME_STYLE token") {
+		t.Fatalf("expected TIME_STYLE warning about unsupported token, got %q", out)
+	}
+}
+
 func TestParseArgsTimeStyleInvalidWarns(t *testing.T) {
 	var stderr bytes.Buffer
 	config, err := ParseArgs([]string{"-l", "--time-style=+%Q"}, &stderr)
