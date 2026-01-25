@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
 name: CI
 
 on: [ push ]
@@ -8,34 +9,36 @@ permissions:
 jobs:
   build:
     runs-on: ${{ matrix.os }}
+    env:
+      GOMODCACHE: ${{ github.workspace }}/.cache/go-mod
+      GOCACHE: ${{ github.workspace }}/.cache/go-build
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
         go-version: ['1.23.x', '1.24.x', '1.25.x']
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           fetch-depth: 1
-      - name: Setup Go ${{ matrix.go-version }}
-        uses: actions/setup-go@v5
+      - name: setup go ${{ matrix.go-version }}
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: ${{ matrix.go-version }}
           cache: false
 
       - name: Cache Go build
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
-            ~/.cache/go-build
-            ~/Library/Caches/go-build
-            ~/go/pkg/mod
+            ${{ github.workspace }}/.cache/go-build
+            ${{ github.workspace }}/.cache/go-mod
           key: go-${{ matrix.go-version }}-${{ runner.os }}-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             go-${{ matrix.go-version }}-${{ runner.os }}-
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v9
+        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9
         with:
           version: v2.6
 
@@ -50,11 +53,4 @@ jobs:
           make all
           test -z "$(go fmt -l .)"
           make vet
-          go test -race -coverprofile=coverage.txt -covermode=atomic ./...
-
-      - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./coverage.txt
-          verbose: true
+          go test -race -cover ./...
