@@ -216,6 +216,8 @@ func TestFormatSizeWithBlockSpec(t *testing.T) {
 	})
 
 	t.Run("grouping", func(t *testing.T) {
+		t.Setenv("LC_ALL", "")
+		t.Setenv("LANG", "")
 		t.Setenv("LC_NUMERIC", "en_US.UTF-8")
 		spec := config.BlockSizeSpec{Mode: config.BlockSizeModeBytes, SizeBytes: 1000, GroupThousands: true}
 		if got := FormatSizeWithBlockSpec(1234000, spec); got != "1,234" {

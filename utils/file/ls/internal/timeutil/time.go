@@ -33,9 +33,6 @@ func ParseTimeStyle(raw string) (*config.TimeStyleSpec, string, bool) {
 		return nil, "missing TIME_STYLE", false
 	}
 	if strings.HasPrefix(style, "posix-") {
-		if isPosixLocale() {
-			return nil, "", false
-		}
 		style = strings.TrimPrefix(style, "posix-")
 	}
 

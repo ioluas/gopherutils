@@ -232,17 +232,25 @@ func TestIsPosixLocale(t *testing.T) {
 }
 
 func TestParseTimeStylePosixPrefix(t *testing.T) {
+	// When LC_ALL is "C", posix-iso should still be parsed correctly after stripping "posix-"
 	t.Setenv("LC_ALL", "C")
 	spec, warn, ok := ParseTimeStyle("posix-iso")
-	if ok || warn != "" || spec != nil {
-		t.Fatalf("expected posix-iso ignored in C locale, ok=%v warn=%q spec=%v", ok, warn, spec)
+	if !ok || warn != "" || spec == nil {
+		t.Fatalf("expected posix-iso to parse correctly in C locale, ok=%v warn=%q spec=%v", ok, warn, spec)
+	}
+	if spec.Kind != config.TimeStyleISO {
+		t.Fatalf("expected Kind to be TimeStyleISO, got %v", spec.Kind)
 	}
 
+	// When not in a POSIX locale, posix-iso should also be parsed correctly
 	t.Setenv("LC_ALL", "")
 	t.Setenv("LANG", "en_US.UTF-8")
 	spec, warn, ok = ParseTimeStyle("posix-iso")
 	if !ok || warn != "" || spec == nil {
-		t.Fatalf("expected posix-iso to parse in non-posix locale, ok=%v warn=%q spec=%v", ok, warn, spec)
+		t.Fatalf("expected posix-iso to parse correctly in non-posix locale, ok=%v warn=%q spec=%v", ok, warn, spec)
+	}
+	if spec.Kind != config.TimeStyleISO {
+		t.Fatalf("expected Kind to be TimeStyleISO, got %v", spec.Kind)
 	}
 }
 
