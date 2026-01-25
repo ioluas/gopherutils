@@ -118,41 +118,44 @@ func parseUintStrict(s string) (uint64, error) {
 	return n, nil
 }
 
+var blockSizeBinaryMultipliers = map[string]uint64{
+	"k":   1 << 10,
+	"K":   1 << 10,
+	"KiB": 1 << 10,
+	"M":   1 << 20,
+	"MiB": 1 << 20,
+	"G":   1 << 30,
+	"GiB": 1 << 30,
+	"T":   1 << 40,
+	"TiB": 1 << 40,
+	"P":   1 << 50,
+	"PiB": 1 << 50,
+	"E":   1 << 60,
+	"EiB": 1 << 60,
+}
+
+var blockSizeDecimalMultipliers = map[string]uint64{
+	"kB": 1_000,
+	"MB": 1_000_000,
+	"GB": 1_000_000_000,
+	"TB": 1_000_000_000_000,
+	"PB": 1_000_000_000_000_000,
+	"EB": 1_000_000_000_000_000_000,
+}
+
 func blockSizeMultiplier(suffix string) (uint64, bool) {
 	if suffix == "" {
 		return 1, true
 	}
 
-	binary := map[string]uint64{
-		"k":   1 << 10,
-		"K":   1 << 10,
-		"KiB": 1 << 10,
-		"M":   1 << 20,
-		"MiB": 1 << 20,
-		"G":   1 << 30,
-		"GiB": 1 << 30,
-		"T":   1 << 40,
-		"TiB": 1 << 40,
-		"P":   1 << 50,
-		"PiB": 1 << 50,
-		"E":   1 << 60,
-		"EiB": 1 << 60,
-	}
-	if v, ok := binary[suffix]; ok {
+	if v, ok := blockSizeBinaryMultipliers[suffix]; ok {
 		return v, true
 	}
 
-	decimal := map[string]uint64{
-		"kB": 1_000,
-		"MB": 1_000_000,
-		"GB": 1_000_000_000,
-		"TB": 1_000_000_000_000,
-		"PB": 1_000_000_000_000_000,
-		"EB": 1_000_000_000_000_000_000,
-	}
-	if v, ok := decimal[suffix]; ok {
+	if v, ok := blockSizeDecimalMultipliers[suffix]; ok {
 		return v, true
 	}
+
 	return 0, false
 }
 
