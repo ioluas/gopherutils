@@ -211,6 +211,16 @@ func TestParseArgs(t *testing.T) {
 			},
 		},
 		{
+			name:        "--full-time flag only",
+			args:        []string{"--full-time"},
+			expectError: false,
+			checkConfig: func(t *testing.T, config *Config) {
+				if !config.FullTime {
+					t.Error("Expected FullTime to be true")
+				}
+			},
+		},
+		{
 			name:        "-l --author flags",
 			args:        []string{"-l", "--author"},
 			expectError: false,
@@ -444,6 +454,36 @@ func TestParseArgsLong(t *testing.T) {
 	}
 }
 
+func TestParseArgsTimeFlags(t *testing.T) {
+	var stderr bytes.Buffer
+	config, err := ParseArgs([]string{"-t"}, &stderr)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if !config.SortTime {
+		t.Fatalf("Expected SortTime to be true")
+	}
+
+	config, err = ParseArgs([]string{"--time=access"}, &stderr)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if config.TimeField != timeFieldAccess {
+		t.Fatalf("Expected TimeField access, got %v", config.TimeField)
+	}
+	if !config.TimeFieldSet {
+		t.Fatalf("Expected TimeFieldSet to be true")
+	}
+}
+
+func TestParseArgsInvalidTimeWord(t *testing.T) {
+	var stderr bytes.Buffer
+	_, err := ParseArgs([]string{"--time=invalid"}, &stderr)
+	if err == nil {
+		t.Fatalf("Expected error for invalid time word")
+	}
+}
+
 func TestParseArgsBlockSize(t *testing.T) {
 	t.Run("valid block size", func(t *testing.T) {
 		var stderr bytes.Buffer
@@ -587,7 +627,7 @@ func TestPrintLongListNonUnix(t *testing.T) {
 	}
 
 	// Output should contain nlink 1, size 1234, and placeholders for owner/group
-	// Format: mode nlink owner group size date time name
+	// Format: mode nlink owner author group size date time name
 	if !strings.Contains(output, "non-unix-file") {
 		t.Errorf("Output should contain filename, got: %q", output)
 	}
@@ -604,22 +644,15 @@ func TestPrintLongListNonUnix(t *testing.T) {
 	config.ShowAuthor = false
 	printLongList(&buf, mockEntries, config)
 	output = buf.String()
-	// Format: mode nlink size date time name (no owner/group)
-	// We check for " - " to ensure it's not present as a column, but mode string contains "-"
-	if strings.Contains(output, " - ") || strings.Contains(output, " -") || strings.Contains(output, "- ") {
-		// Wait, mode string is like "-rw-r--r--"
-		// We should check specifically for the owner/group columns which we expect to be empty
-		fields := strings.Fields(output)
-		// Expected fields: mode, nlink, size, month, day, time, name
-		// Total 7 fields.
-		if len(fields) != 7 {
-			t.Errorf("Expected 7 fields when ShowAuthor is false, got %d: %v", len(fields), fields)
-		}
-		for _, field := range fields {
-			if field == "-" {
-				t.Errorf("Output should NOT contain placeholder '-' when ShowAuthor is false: %q", output)
-			}
-		}
+	// Format: mode nlink owner group size date time name (no author column)
+	fields := strings.Fields(output)
+	// Expected fields: mode, nlink, owner, group, size, month, day, time, name
+	// Total 9 fields.
+	if len(fields) != 9 {
+		t.Errorf("Expected 9 fields when ShowAuthor is false, got %d: %v", len(fields), fields)
+	}
+	if !strings.Contains(output, " - ") {
+		t.Errorf("Expected placeholders '-' for owner/group, got %q", output)
 	}
 }
 
@@ -753,6 +786,26 @@ func TestRun(t *testing.T) {
 			expectedExit:   0,
 			expectedStdout: "",
 			expectedStderr: "ls: warning: --no-group is ignored when -l is not used",
+		},
+		{
+			name:   "--time without -l warns",
+			config: &Config{TimeFieldSet: true, TimeField: timeFieldAccess},
+			setupFunc: func(t *testing.T) string {
+				return t.TempDir()
+			},
+			expectedExit:   0,
+			expectedStdout: "",
+			expectedStderr: "ls: warning: --time is ignored when -l is not used",
+		},
+		{
+			name:   "--full-time without -l warns",
+			config: &Config{FullTime: true, TimeStyleSpec: &timeStyleSpec{kind: timeStyleFullISO, recentLayout: "2006-01-02 15:04:05.000000000 -0700"}},
+			setupFunc: func(t *testing.T) string {
+				return t.TempDir()
+			},
+			expectedExit:   0,
+			expectedStdout: "",
+			expectedStderr: "ls: warning: --full-time is ignored when -l is not used",
 		},
 		{
 			name: "list directory with dotfiles - no flags",
@@ -1134,22 +1187,26 @@ func getFileDetails(t *testing.T, filename string, owner, group string, showAuth
 		maxSizeLen = 1
 	} // Assuming minimum 1 for size formatting
 
+	maxOwnerLen := len(owner)
+	maxGroupLen := len(group)
 	if showAuthor {
-		maxOwnerLen := len(owner)
-		maxGroupLen := len(group)
-		return fmt.Sprintf("%s %*d %-*s %-*s %*d %s %s\n",
+		maxAuthorLen := len(owner)
+		return fmt.Sprintf("%s %*d %-*s %-*s %-*s %*d %s %s\n",
 			mode,
 			maxLinkLen, nlink,
 			maxOwnerLen, owner,
+			maxAuthorLen, owner,
 			maxGroupLen, group,
 			maxSizeLen, size,
 			modTime,
 			filename,
 		)
 	}
-	return fmt.Sprintf("%s %*d %*d %s %s\n",
+	return fmt.Sprintf("%s %*d %-*s %-*s %*d %s %s\n",
 		mode,
 		maxLinkLen, nlink,
+		maxOwnerLen, owner,
+		maxGroupLen, group,
 		maxSizeLen, size,
 		modTime,
 		filename,
@@ -1417,8 +1474,8 @@ func TestPrintLongListWithoutAuthor(t *testing.T) {
 	}
 
 	output := buf.String()
-	// Should not contain owner/group when ShowAuthor is false
-	// Format should be: mode nlink size date time name
+	// Should not contain author column when ShowAuthor is false
+	// Format should be: mode nlink owner group size date time name
 	if !strings.Contains(output, "file1.txt") {
 		t.Error("Expected output to contain 'file1.txt'")
 	}
@@ -1426,10 +1483,9 @@ func TestPrintLongListWithoutAuthor(t *testing.T) {
 	lines := strings.Split(strings.TrimSpace(output), "\n")
 	if len(lines) > 0 {
 		fields := strings.Fields(lines[0])
-		// Should have: mode, nlink, size, date, time, name (6 fields without author)
-		// Or: mode, nlink, size, date, time, name (6 fields)
-		if len(fields) < 6 {
-			t.Errorf("Expected at least 6 fields in long listing, got %d: %v", len(fields), fields)
+		// Should have: mode, nlink, owner, group, size, date, time, name (8 fields)
+		if len(fields) < 8 {
+			t.Errorf("Expected at least 8 fields in long listing, got %d: %v", len(fields), fields)
 		}
 	}
 }
@@ -1705,8 +1761,8 @@ func TestPrintLongListWithNoGroup(t *testing.T) {
 		t.Fatalf("Expected output, got empty")
 	}
 	fields := strings.Fields(lines[0])
-	if len(fields) != 8 {
-		t.Fatalf("Expected 8 fields (mode nlink owner size month day time name), got %d: %v", len(fields), fields)
+	if len(fields) != 9 {
+		t.Fatalf("Expected 9 fields (mode nlink owner author size month day time name), got %d: %v", len(fields), fields)
 	}
 }
 
@@ -1733,11 +1789,51 @@ func TestPrintLongListWithBlockSize(t *testing.T) {
 		t.Fatalf("Expected output, got empty")
 	}
 	fields := strings.Fields(lines[0])
-	if len(fields) < 6 {
+	if len(fields) < 8 {
 		t.Fatalf("Expected long listing fields, got %v", fields)
 	}
-	if fields[2] != "2" {
-		t.Errorf("Expected block size count 2, got %q", fields[2])
+	if fields[4] != "2" {
+		t.Errorf("Expected block size count 2, got %q", fields[4])
+	}
+}
+
+func TestRunSortByTime(t *testing.T) {
+	tmpDir := t.TempDir()
+	oldPath := filepath.Join(tmpDir, "old.txt")
+	newPath := filepath.Join(tmpDir, "new.txt")
+	if err := os.WriteFile(oldPath, []byte("old"), 0644); err != nil {
+		t.Fatalf("failed to create old file: %v", err)
+	}
+	if err := os.WriteFile(newPath, []byte("new"), 0644); err != nil {
+		t.Fatalf("failed to create new file: %v", err)
+	}
+
+	oldTime := time.Now().Add(-2 * time.Hour)
+	newTime := time.Now().Add(-1 * time.Hour)
+	if err := os.Chtimes(oldPath, oldTime, oldTime); err != nil {
+		t.Fatalf("failed to set times on old file: %v", err)
+	}
+	if err := os.Chtimes(newPath, newTime, newTime); err != nil {
+		t.Fatalf("failed to set times on new file: %v", err)
+	}
+
+	config := &Config{
+		SortTime:  true,
+		TimeField: timeFieldMod,
+	}
+
+	var stdout, stderr bytes.Buffer
+	exitCode := run(tmpDir, config, &stdout, &stderr)
+	if exitCode != 0 {
+		t.Fatalf("run() failed: %v", stderr.String())
+	}
+
+	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
+	if len(lines) < 2 {
+		t.Fatalf("Expected at least 2 lines, got %d", len(lines))
+	}
+	if lines[0] != "new.txt" || lines[1] != "old.txt" {
+		t.Fatalf("Expected newest first, got %v", lines)
 	}
 }
 
