@@ -64,9 +64,11 @@ type Config struct {
 	HumanReadable bool // -h: with -l, print sizes in human readable format
 	SI            bool // --si: with -l, print sizes in powers of 1000 not 1024
 	ShowAuthor    bool // --author: with -l, print the author of each file
+	NoGroup       bool // -G, --no-group: in a long listing, don't print group names
 	Escape        bool // -b, --escape: print C-style escapes for nongraphic characters
 	IgnoreBackups bool // -B, --ignore-backups: do not list implied entries ending with ~
 	ListDirectory bool // -d, --directory: list directories themselves, not their contents
+	BlockSize     *BlockSizeSpec
 }
 
 func main() {
@@ -106,6 +108,7 @@ func Execute(args []string, stdout, stderr io.Writer) int {
 func ParseArgs(args []string, stderr io.Writer) (*Config, error) {
 	config := &Config{}
 	var showHelp bool
+	var blockSizeRaw string
 
 	// Create a new FlagSet for ls
 	flagSet := pflag.NewFlagSet("ls", pflag.ContinueOnError)
@@ -120,9 +123,11 @@ func ParseArgs(args []string, stderr io.Writer) (*Config, error) {
 	flagSet.BoolVarP(&config.HumanReadable, "human-readable", "h", false, "with -l, print sizes in human readable format (e.g., 1K 234M 2G)")
 	flagSet.BoolVar(&config.SI, "si", false, "with -l, print sizes in powers of 1000 not 1024")
 	flagSet.BoolVar(&config.ShowAuthor, "author", false, "with -l, print the author of each file. Note: Due to OS/filesystem limitations, the author is typically the same as the owner.")
+	flagSet.BoolVarP(&config.NoGroup, "no-group", "G", false, "in a long listing, don't print group names")
 	flagSet.BoolVarP(&config.Escape, "escape", "b", false, "print C-style escapes for nongraphic characters")
 	flagSet.BoolVarP(&config.IgnoreBackups, "ignore-backups", "B", false, "do not list implied entries ending with ~")
 	flagSet.BoolVarP(&config.ListDirectory, "directory", "d", false, "list directories themselves, not their contents")
+	flagSet.StringVar(&blockSizeRaw, "block-size", "", "with -l, scale sizes by SIZE when printing them; e.g., '--block-size=M'")
 	flagSet.BoolVarP(&showHelp, "help", "?", false, "display this help and exit")
 
 	// Parse the arguments
@@ -156,6 +161,16 @@ func ParseArgs(args []string, stderr io.Writer) (*Config, error) {
 	} else {
 		// Use all remaining arguments as directories
 		config.Directories = remainingArgs
+	}
+
+	if blockSizeRaw != "" {
+		spec, warnMsg, ok := parseBlockSize(blockSizeRaw)
+		if warnMsg != "" {
+			_, _ = fmt.Fprintf(stderr, "ls: warning: --block-size: %s\n", warnMsg)
+		}
+		if ok {
+			config.BlockSize = &spec
+		}
 	}
 
 	return config, nil
@@ -278,6 +293,16 @@ func run(path string, config *Config, stdout, stderr io.Writer) int {
 		}
 	}
 
+	// Warn if --block-size is used without -l
+	if config.BlockSize != nil && !config.LongListing {
+		_, _ = fmt.Fprintf(stderr, "ls: warning: option --block-size is ignored when -l is not used\n")
+	}
+
+	// Warn if --no-group is used without -l
+	if config.NoGroup && !config.LongListing {
+		_, _ = fmt.Fprintf(stderr, "ls: warning: --no-group is ignored when -l is not used\n")
+	}
+
 	// Warn if --author is used without -l
 	if config.ShowAuthor && !config.LongListing {
 		_, _ = fmt.Fprintf(stderr, "ls: warning: --author is ignored when -l is not used\n")
@@ -331,6 +356,7 @@ func printLongList(w io.Writer, entries []os.DirEntry, config *Config) {
 
 		sysStat, ok := info.Sys().(*syscall.Stat_t)
 		if ok {
+			//goland:noinspection GoRedundantConversion
 			nlink = uint64(sysStat.Nlink)
 			if config.ShowAuthor {
 				owner, group = fsutil.GetOwnerGroup(sysStat)
@@ -344,7 +370,9 @@ func printLongList(w io.Writer, entries []os.DirEntry, config *Config) {
 		}
 
 		var sizeStr string
-		if config.SI {
+		if config.BlockSize != nil {
+			sizeStr = formatSizeWithBlockSpec(size, *config.BlockSize)
+		} else if config.SI {
 			sizeStr = formatSize(size, 1000)
 		} else if config.HumanReadable {
 			sizeStr = formatSize(size, 1024)
@@ -376,8 +404,10 @@ func printLongList(w io.Writer, entries []os.DirEntry, config *Config) {
 			if l := len(d.owner); l > maxOwnerLen {
 				maxOwnerLen = l
 			}
-			if l := len(d.group); l > maxGroupLen {
-				maxGroupLen = l
+			if !config.NoGroup {
+				if l := len(d.group); l > maxGroupLen {
+					maxGroupLen = l
+				}
 			}
 		}
 		if l := len(d.sizeStr); l > maxSizeLen {
@@ -394,15 +424,26 @@ func printLongList(w io.Writer, entries []os.DirEntry, config *Config) {
 	// e.g. -rw-r--r-- 1 user group 123 Jan 01 12:00 file.txt
 	for _, d := range details {
 		if config.ShowAuthor {
-			_, _ = fmt.Fprintf(w, "%s %*d %-*s %-*s %*s %s %s\n",
-				d.mode,
-				maxLinkLen, d.nlink,
-				maxOwnerLen, d.owner,
-				maxGroupLen, d.group,
-				maxSizeLen, d.sizeStr,
-				d.modTime.Format("Jan 02 15:04"),
-				d.name,
-			)
+			if config.NoGroup {
+				_, _ = fmt.Fprintf(w, "%s %*d %-*s %*s %s %s\n",
+					d.mode,
+					maxLinkLen, d.nlink,
+					maxOwnerLen, d.owner,
+					maxSizeLen, d.sizeStr,
+					d.modTime.Format("Jan 02 15:04"),
+					d.name,
+				)
+			} else {
+				_, _ = fmt.Fprintf(w, "%s %*d %-*s %-*s %*s %s %s\n",
+					d.mode,
+					maxLinkLen, d.nlink,
+					maxOwnerLen, d.owner,
+					maxGroupLen, d.group,
+					maxSizeLen, d.sizeStr,
+					d.modTime.Format("Jan 02 15:04"),
+					d.name,
+				)
+			}
 		} else {
 			// Print without owner/group if --author is not specified
 			_, _ = fmt.Fprintf(w, "%s %*d %*s %s %s\n",
@@ -428,6 +469,209 @@ func formatSize(size int64, unit int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f%c", float64(size)/float64(div), suffixes[exp])
+}
+
+type blockSizeMode int
+
+const (
+	blockSizeModeBytes blockSizeMode = iota
+	blockSizeModeHuman
+	blockSizeModeSI
+)
+
+type BlockSizeSpec struct {
+	mode           blockSizeMode
+	sizeBytes      int64
+	suffix         string
+	showSuffix     bool
+	groupThousands bool
+}
+
+func parseBlockSize(raw string) (BlockSizeSpec, string, bool) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return BlockSizeSpec{}, "missing SIZE", false
+	}
+
+	lower := strings.ToLower(trimmed)
+	if lower == "human-readable" {
+		return BlockSizeSpec{mode: blockSizeModeHuman}, "", true
+	}
+	if lower == "si" {
+		return BlockSizeSpec{mode: blockSizeModeSI}, "", true
+	}
+
+	spec := BlockSizeSpec{mode: blockSizeModeBytes}
+	if strings.HasPrefix(trimmed, "'") {
+		spec.groupThousands = true
+		trimmed = strings.TrimPrefix(trimmed, "'")
+	}
+	if trimmed == "" {
+		return BlockSizeSpec{}, "missing SIZE", false
+	}
+
+	var numStr string
+	var suffix string
+	nonDigitIdx := -1
+	for i := 0; i < len(trimmed); i++ {
+		if trimmed[i] < '0' || trimmed[i] > '9' {
+			nonDigitIdx = i
+			break
+		}
+	}
+	switch nonDigitIdx {
+	case -1:
+		numStr = trimmed
+	case 0:
+		suffix = trimmed
+	default:
+		numStr = trimmed[:nonDigitIdx]
+		suffix = trimmed[nonDigitIdx:]
+	}
+
+	var num uint64
+	if numStr == "" {
+		num = 1
+		spec.showSuffix = true
+	} else {
+		var err error
+		num, err = parseUintStrict(numStr)
+		if err != nil || num == 0 {
+			return BlockSizeSpec{}, "invalid SIZE number", false
+		}
+	}
+
+	multiplier, ok := blockSizeMultiplier(suffix)
+	if !ok {
+		if suffix == "" {
+			multiplier = 1
+		} else {
+			return BlockSizeSpec{}, "unknown SIZE suffix", false
+		}
+	}
+
+	if num > ^uint64(0)/multiplier {
+		return BlockSizeSpec{}, "SIZE too large", false
+	}
+	total := num * multiplier
+	//goland:noinspection GoRedundantConversion
+	const maxInt64 = uint64(^uint64(0) >> 1)
+	if total > maxInt64 {
+		return BlockSizeSpec{}, "SIZE too large", false
+	}
+
+	spec.sizeBytes = int64(total)
+	spec.suffix = suffix
+	return spec, "", true
+}
+
+func parseUintStrict(s string) (uint64, error) {
+	if s == "" {
+		return 0, errors.New("empty")
+	}
+	var n uint64
+	for i := 0; i < len(s); i++ {
+		ch := s[i]
+		if ch < '0' || ch > '9' {
+			return 0, errors.New("invalid")
+		}
+		d := uint64(ch - '0')
+		if n > (^uint64(0)-d)/10 {
+			return 0, errors.New("overflow")
+		}
+		n = n*10 + d
+	}
+	return n, nil
+}
+
+func blockSizeMultiplier(suffix string) (uint64, bool) {
+	if suffix == "" {
+		return 1, true
+	}
+
+	binary := map[string]uint64{
+		"k":   1 << 10,
+		"K":   1 << 10,
+		"KiB": 1 << 10,
+		"M":   1 << 20,
+		"MiB": 1 << 20,
+		"G":   1 << 30,
+		"GiB": 1 << 30,
+		"T":   1 << 40,
+		"TiB": 1 << 40,
+		"P":   1 << 50,
+		"PiB": 1 << 50,
+		"E":   1 << 60,
+		"EiB": 1 << 60,
+	}
+	if v, ok := binary[suffix]; ok {
+		return v, true
+	}
+
+	decimal := map[string]uint64{
+		"kB": 1_000,
+		"MB": 1_000_000,
+		"GB": 1_000_000_000,
+		"TB": 1_000_000_000_000,
+		"PB": 1_000_000_000_000_000,
+		"EB": 1_000_000_000_000_000_000,
+	}
+	if v, ok := decimal[suffix]; ok {
+		return v, true
+	}
+	return 0, false
+}
+
+func formatSizeWithBlockSpec(size int64, spec BlockSizeSpec) string {
+	switch spec.mode {
+	case blockSizeModeHuman:
+		return formatSize(size, 1024)
+	case blockSizeModeSI:
+		return formatSize(size, 1000)
+	default:
+	}
+
+	if spec.sizeBytes <= 0 {
+		return fmt.Sprintf("%d", size)
+	}
+	blocks := int64(0)
+	if size > 0 {
+		blocks = (size-1)/spec.sizeBytes + 1
+	}
+	out := fmt.Sprintf("%d", blocks)
+	if spec.groupThousands && shouldGroupThousands() {
+		out = groupThousands(out)
+	}
+	if spec.showSuffix && spec.suffix != "" {
+		out += spec.suffix
+	}
+	return out
+}
+
+func shouldGroupThousands() bool {
+	locale := os.Getenv("LC_NUMERIC")
+	if locale == "" {
+		return false
+	}
+	return locale != "C" && locale != "POSIX"
+}
+
+func groupThousands(s string) string {
+	if len(s) <= 3 {
+		return s
+	}
+	rem := len(s) % 3
+	if rem == 0 {
+		rem = 3
+	}
+	var b strings.Builder
+	b.Grow(len(s) + (len(s)-1)/3)
+	b.WriteString(s[:rem])
+	for i := rem; i < len(s); i += 3 {
+		b.WriteByte(',')
+		b.WriteString(s[i : i+3])
+	}
+	return b.String()
 }
 
 // printEntries prints entry names to the output writer.

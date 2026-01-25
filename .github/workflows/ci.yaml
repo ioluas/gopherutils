@@ -7,13 +7,11 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        include:
-          - go-version: '1.23.x'
-          - go-version: '1.24.x'
-          - go-version: '1.25.x'
+        os: [ubuntu-latest, macos-latest]
+        go-version: ['1.23.x', '1.24.x', '1.25.x']
 
     steps:
       - uses: actions/checkout@v5
@@ -23,8 +21,18 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go-version }}
-          cache: true
-          cache-dependency-path: go.sum
+          cache: false
+
+      - name: Cache Go build
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/Library/Caches/go-build
+            ~/go/pkg/mod
+          key: go-${{ matrix.go-version }}-${{ runner.os }}-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            go-${{ matrix.go-version }}-${{ runner.os }}-
 
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v9
@@ -45,7 +53,7 @@ jobs:
           go test -race -coverprofile=coverage.txt -covermode=atomic ./...
 
       - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage.txt
