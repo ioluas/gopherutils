@@ -1,13 +1,15 @@
-package main
+package size
 
 import (
 	"errors"
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/ioluas/gopherutils/utils/file/ls/internal/config"
 )
 
-func formatSize(size int64, unit int64) string {
+func FormatSize(size int64, unit int64) string {
 	if size < unit {
 		return fmt.Sprintf("%d", size)
 	}
@@ -21,27 +23,27 @@ func formatSize(size int64, unit int64) string {
 	return fmt.Sprintf("%.1f%c", float64(size)/float64(div), suffixes[exp])
 }
 
-func parseBlockSize(raw string) (BlockSizeSpec, string, bool) {
+func ParseBlockSize(raw string) (config.BlockSizeSpec, string, bool) {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
-		return BlockSizeSpec{}, "missing SIZE", false
+		return config.BlockSizeSpec{}, "missing SIZE", false
 	}
 
 	lower := strings.ToLower(trimmed)
 	if lower == "human-readable" {
-		return BlockSizeSpec{mode: blockSizeModeHuman}, "", true
+		return config.BlockSizeSpec{Mode: config.BlockSizeModeHuman}, "", true
 	}
 	if lower == "si" {
-		return BlockSizeSpec{mode: blockSizeModeSI}, "", true
+		return config.BlockSizeSpec{Mode: config.BlockSizeModeSI}, "", true
 	}
 
-	spec := BlockSizeSpec{mode: blockSizeModeBytes}
+	spec := config.BlockSizeSpec{Mode: config.BlockSizeModeBytes}
 	if strings.HasPrefix(trimmed, "'") {
-		spec.groupThousands = true
+		spec.GroupThousands = true
 		trimmed = strings.TrimPrefix(trimmed, "'")
 	}
 	if trimmed == "" {
-		return BlockSizeSpec{}, "missing SIZE", false
+		return config.BlockSizeSpec{}, "missing SIZE", false
 	}
 
 	var numStr string
@@ -66,12 +68,12 @@ func parseBlockSize(raw string) (BlockSizeSpec, string, bool) {
 	var num uint64
 	if numStr == "" {
 		num = 1
-		spec.showSuffix = true
+		spec.ShowSuffix = true
 	} else {
 		var err error
-		num, err = parseUintStrict(numStr)
+		num, err = ParseUintStrict(numStr)
 		if err != nil || num == 0 {
-			return BlockSizeSpec{}, "invalid SIZE number", false
+			return config.BlockSizeSpec{}, "invalid SIZE number", false
 		}
 	}
 
@@ -80,26 +82,26 @@ func parseBlockSize(raw string) (BlockSizeSpec, string, bool) {
 		if suffix == "" {
 			multiplier = 1
 		} else {
-			return BlockSizeSpec{}, "unknown SIZE suffix", false
+			return config.BlockSizeSpec{}, "unknown SIZE suffix", false
 		}
 	}
 
 	if num > ^uint64(0)/multiplier {
-		return BlockSizeSpec{}, "SIZE too large", false
+		return config.BlockSizeSpec{}, "SIZE too large", false
 	}
 	total := num * multiplier
 	//goland:noinspection GoRedundantConversion
 	const maxInt64 = uint64(^uint64(0) >> 1)
 	if total > maxInt64 {
-		return BlockSizeSpec{}, "SIZE too large", false
+		return config.BlockSizeSpec{}, "SIZE too large", false
 	}
 
-	spec.sizeBytes = int64(total)
-	spec.suffix = suffix
+	spec.SizeBytes = int64(total)
+	spec.Suffix = suffix
 	return spec, "", true
 }
 
-func parseUintStrict(s string) (uint64, error) {
+func ParseUintStrict(s string) (uint64, error) {
 	if s == "" {
 		return 0, errors.New("empty")
 	}
@@ -159,38 +161,39 @@ func blockSizeMultiplier(suffix string) (uint64, bool) {
 	return 0, false
 }
 
-func formatSizeWithBlockSpec(size int64, spec BlockSizeSpec) string {
-	switch spec.mode {
-	case blockSizeModeHuman:
-		return formatSize(size, 1024)
-	case blockSizeModeSI:
-		return formatSize(size, 1000)
+func FormatSizeWithBlockSpec(size int64, spec config.BlockSizeSpec) string {
+	switch spec.Mode {
+	case config.BlockSizeModeHuman:
+		return FormatSize(size, 1024)
+	case config.BlockSizeModeSI:
+		return FormatSize(size, 1000)
 	default:
 	}
 
-	if spec.sizeBytes <= 0 {
+	if spec.SizeBytes <= 0 {
 		return fmt.Sprintf("%d", size)
 	}
 	blocks := int64(0)
 	if size > 0 {
-		blocks = (size-1)/spec.sizeBytes + 1
+		blocks = (size-1)/spec.SizeBytes + 1
 	}
 	out := fmt.Sprintf("%d", blocks)
-	if spec.groupThousands && shouldGroupThousands() {
+	if spec.GroupThousands && shouldGroupThousands() {
 		out = groupThousands(out)
 	}
-	if spec.showSuffix && spec.suffix != "" {
-		out += spec.suffix
+	if spec.ShowSuffix && spec.Suffix != "" {
+		out += spec.Suffix
 	}
 	return out
 }
 
 func shouldGroupThousands() bool {
-	locale := os.Getenv("LC_NUMERIC")
-	if locale == "" {
-		return false
+	for _, envVar := range []string{"LC_ALL", "LC_NUMERIC", "LANG"} {
+		if locale := os.Getenv(envVar); locale != "" {
+			return locale != "C" && locale != "POSIX"
+		}
 	}
-	return locale != "C" && locale != "POSIX"
+	return false
 }
 
 func groupThousands(s string) string {

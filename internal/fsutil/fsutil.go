@@ -12,10 +12,21 @@ var (
 	groupCache sync.Map
 )
 
+// GetOwnerGroupFuncType defines the signature for the GetOwnerGroup function.
+type GetOwnerGroupFuncType func(stat *syscall.Stat_t) (string, string)
+
+// getOwnerGroupImpl is the actual implementation of GetOwnerGroup.
+// It can be overridden by tests.
+var GetOwnerGroupImpl GetOwnerGroupFuncType = DefaultGetOwnerGroup
+
 // GetOwnerGroup returns the username and group name for a file's UID/GID.
 // It uses caching to avoid repeated lookups.
 // If lookup fails, it returns the numeric UID/GID as strings.
 func GetOwnerGroup(stat *syscall.Stat_t) (string, string) {
+	return GetOwnerGroupImpl(stat)
+}
+
+func DefaultGetOwnerGroup(stat *syscall.Stat_t) (string, string) {
 	uid := stat.Uid
 	gid := stat.Gid
 

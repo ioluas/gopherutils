@@ -1,4 +1,4 @@
-package main
+package timeutil
 
 import (
 	"fmt"
@@ -8,24 +8,26 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/ioluas/gopherutils/utils/file/ls/internal/config"
 )
 
-func parseTimeWord(word string) (timeField, error) {
+func ParseTimeWord(word string) (config.TimeField, error) {
 	switch strings.ToLower(word) {
 	case "atime", "access", "use":
-		return timeFieldAccess, nil
+		return config.TimeFieldAccess, nil
 	case "ctime", "status":
-		return timeFieldChange, nil
+		return config.TimeFieldChange, nil
 	case "mtime", "modification":
-		return timeFieldMod, nil
+		return config.TimeFieldMod, nil
 	case "birth", "creation":
-		return timeFieldBirth, nil
+		return config.TimeFieldBirth, nil
 	default:
-		return timeFieldMod, fmt.Errorf("invalid --time value: %s", word)
+		return config.TimeFieldMod, fmt.Errorf("invalid --time value: %s", word)
 	}
 }
 
-func parseTimeStyle(raw string) (*timeStyleSpec, string, bool) {
+func ParseTimeStyle(raw string) (*config.TimeStyleSpec, string, bool) {
 	style := strings.TrimSpace(raw)
 	if style == "" {
 		return nil, "missing TIME_STYLE", false
@@ -39,44 +41,44 @@ func parseTimeStyle(raw string) (*timeStyleSpec, string, bool) {
 
 	switch style {
 	case "full-iso":
-		return &timeStyleSpec{
-			kind:         timeStyleFullISO,
-			recentLayout: "2006-01-02 15:04:05.000000000 -0700",
+		return &config.TimeStyleSpec{
+			Kind:         config.TimeStyleFullISO,
+			RecentLayout: "2006-01-02 15:04:05.000000000 -0700",
 		}, "", true
 	case "long-iso":
-		return &timeStyleSpec{
-			kind:         timeStyleLongISO,
-			recentLayout: "2006-01-02 15:04",
+		return &config.TimeStyleSpec{
+			Kind:         config.TimeStyleLongISO,
+			RecentLayout: "2006-01-02 15:04",
 		}, "", true
 	case "iso":
-		return &timeStyleSpec{
-			kind:         timeStyleISO,
-			recentLayout: "01-02 15:04",
-			oldLayout:    "2006-01-02",
+		return &config.TimeStyleSpec{
+			Kind:         config.TimeStyleISO,
+			RecentLayout: "01-02 15:04",
+			OldLayout:    "2006-01-02",
 		}, "", true
 	case "locale":
-		return &timeStyleSpec{
-			kind:         timeStyleLocale,
-			recentLayout: "Jan 02 15:04",
-			oldLayout:    "Jan 02  2006",
+		return &config.TimeStyleSpec{
+			Kind:         config.TimeStyleLocale,
+			RecentLayout: "Jan 02 15:04",
+			OldLayout:    "Jan 02  2006",
 		}, "", true
 	default:
 		if strings.HasPrefix(style, "+") {
-			recent, old, warn, ok := parseTimeFormat(style[1:])
+			recent, old, warn, ok := ParseTimeFormat(style[1:])
 			if !ok {
 				return nil, warn, false
 			}
-			return &timeStyleSpec{
-				kind:         timeStyleCustom,
-				recentLayout: recent,
-				oldLayout:    old,
+			return &config.TimeStyleSpec{
+				Kind:         config.TimeStyleCustom,
+				RecentLayout: recent,
+				OldLayout:    old,
 			}, warn, warn == ""
 		}
 		return nil, fmt.Sprintf("unknown TIME_STYLE %q", style), false
 	}
 }
 
-func parseTimeFormat(format string) (string, string, string, bool) {
+func ParseTimeFormat(format string) (string, string, string, bool) {
 	if format == "" {
 		return "", "", "missing TIME_STYLE format", false
 	}
@@ -84,13 +86,13 @@ func parseTimeFormat(format string) (string, string, string, bool) {
 	if len(parts) > 2 {
 		return "", "", "invalid TIME_STYLE format", false
 	}
-	recent, warn, ok := convertTimeFormat(parts[len(parts)-1])
+	recent, warn, ok := ConvertTimeFormat(parts[len(parts)-1])
 	if !ok {
 		return "", "", warn, false
 	}
 	old := ""
 	if len(parts) == 2 {
-		old, warn, ok = convertTimeFormat(parts[0])
+		old, warn, ok = ConvertTimeFormat(parts[0])
 		if !ok {
 			return "", "", warn, false
 		}
@@ -98,7 +100,7 @@ func parseTimeFormat(format string) (string, string, string, bool) {
 	return recent, old, "", true
 }
 
-func convertTimeFormat(format string) (string, string, bool) {
+func ConvertTimeFormat(format string) (string, string, bool) {
 	var b strings.Builder
 	for i := 0; i < len(format); i++ {
 		if format[i] != '%' {
@@ -154,13 +156,13 @@ func isPosixLocale() bool {
 	return true
 }
 
-func formatTime(t time.Time, config *Config) string {
+func FormatTime(t time.Time, config *config.Config) string {
 	if config.TimeStyleSpec == nil {
 		return t.Format("Jan 02 15:04")
 	}
-	layout := config.TimeStyleSpec.recentLayout
-	if config.TimeStyleSpec.oldLayout != "" && !isRecentTime(t) {
-		layout = config.TimeStyleSpec.oldLayout
+	layout := config.TimeStyleSpec.RecentLayout
+	if config.TimeStyleSpec.OldLayout != "" && !isRecentTime(t) {
+		layout = config.TimeStyleSpec.OldLayout
 	}
 	return t.Format(layout)
 }
@@ -173,8 +175,8 @@ func isRecentTime(t time.Time) bool {
 	return t.After(now.Add(-180 * 24 * time.Hour))
 }
 
-func getEntryTime(info fs.FileInfo, field timeField) time.Time {
-	if field == timeFieldMod {
+func GetEntryTime(info fs.FileInfo, field config.TimeField) time.Time {
+	if field == config.TimeFieldMod {
 		return info.ModTime()
 	}
 	stat, ok := info.Sys().(*syscall.Stat_t)
@@ -182,15 +184,15 @@ func getEntryTime(info fs.FileInfo, field timeField) time.Time {
 		return info.ModTime()
 	}
 	switch field {
-	case timeFieldAccess:
+	case config.TimeFieldAccess:
 		if t := statAtime(stat); !t.IsZero() {
 			return t
 		}
-	case timeFieldChange:
+	case config.TimeFieldChange:
 		if t := statCtime(stat); !t.IsZero() {
 			return t
 		}
-	case timeFieldBirth:
+	case config.TimeFieldBirth:
 		if t, ok := statBirthtime(stat); ok && !t.IsZero() {
 			return t
 		}
@@ -198,22 +200,22 @@ func getEntryTime(info fs.FileInfo, field timeField) time.Time {
 	return info.ModTime()
 }
 
-func normalizeTimeConfig(config *Config, stderr io.Writer) {
-	// Warn if --time is used without -l
-	if config.TimeFieldSet && !config.LongListing {
+func NormalizeTimeConfig(cfg *config.Config, stderr io.Writer) {
+	// Warn if --time is used without -l or -t
+	if cfg.TimeFieldSet && !cfg.LongListing && !cfg.SortTime {
 		_, _ = fmt.Fprintf(stderr, "ls: warning: --time is ignored when -l is not used\n")
-		config.TimeField = timeFieldMod
+		cfg.TimeField = config.TimeFieldMod
 	}
 
 	// Warn if --time-style is used without -l
-	if config.TimeStyleSet && !config.LongListing {
+	if cfg.TimeStyleSet && !cfg.LongListing {
 		_, _ = fmt.Fprintf(stderr, "ls: warning: --time-style is ignored when -l is not used\n")
-		config.TimeStyleSpec = nil
+		cfg.TimeStyleSpec = nil
 	}
 
 	// Warn if --full-time is used without -l
-	if config.FullTime && !config.LongListing {
+	if cfg.FullTime && !cfg.LongListing {
 		_, _ = fmt.Fprintf(stderr, "ls: warning: --full-time is ignored when -l is not used\n")
-		config.TimeStyleSpec = nil
+		cfg.TimeStyleSpec = nil
 	}
 }

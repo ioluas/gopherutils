@@ -1,4 +1,4 @@
-package main
+package display
 
 import (
 	"fmt"
@@ -9,9 +9,14 @@ import (
 	"time"
 
 	"github.com/ioluas/gopherutils/internal/fsutil"
+	"github.com/ioluas/gopherutils/utils/file/ls/internal/config"
+	"github.com/ioluas/gopherutils/utils/file/ls/internal/entry"
+	"github.com/ioluas/gopherutils/utils/file/ls/internal/size"
+	"github.com/ioluas/gopherutils/utils/file/ls/internal/timeutil"
+	"golang.org/x/term"
 )
 
-func quoteName(name string) string {
+func QuoteName(name string) string {
 	var b strings.Builder
 	for i := 0; i < len(name); i++ {
 		c := name[i]
@@ -43,7 +48,7 @@ func quoteName(name string) string {
 	return b.String()
 }
 
-func printLongList(w io.Writer, entries []os.DirEntry, config *Config) {
+func PrintLongList(stdout, stderr io.Writer, entries []os.DirEntry, config *config.Config) {
 	if len(entries) == 0 {
 		return
 	}
@@ -51,20 +56,20 @@ func printLongList(w io.Writer, entries []os.DirEntry, config *Config) {
 	// Gather all file info
 	details := make([]fileDetails, 0, len(entries))
 	var maxLinkLen, maxOwnerLen, maxAuthorLen, maxGroupLen, maxSizeLen int
-	for _, entry := range entries {
-		info, err := entry.Info()
+	for _, dirEntry := range entries {
+		info, err := dirEntry.Info()
 		if err != nil {
-			// Skip entries we can't get info for (or print error?)
-			// Standard ls might print error.
+			_, _ = fmt.Fprintf(stderr, "ls: cannot access '%s': %v\n", dirEntry.Name(), err)
 			continue
 		}
 
 		var nlink uint64 = 1
 		var owner, group, author string
-		size := info.Size()
+		fileSize := info.Size()
 
-		sysStat, ok := info.Sys().(*syscall.Stat_t)
-		if ok {
+		sysData := info.Sys()
+		sysStat, ok := sysData.(*syscall.Stat_t)
+		if ok && sysStat != nil {
 			//goland:noinspection GoRedundantConversion
 			nlink = uint64(sysStat.Nlink)
 			owner, group = fsutil.GetOwnerGroup(sysStat)
@@ -82,25 +87,25 @@ func printLongList(w io.Writer, entries []os.DirEntry, config *Config) {
 
 		var sizeStr string
 		if config.BlockSize != nil {
-			sizeStr = formatSizeWithBlockSpec(size, *config.BlockSize)
+			sizeStr = size.FormatSizeWithBlockSpec(fileSize, *config.BlockSize)
 		} else if config.SI {
-			sizeStr = formatSize(size, 1000)
+			sizeStr = size.FormatSize(fileSize, 1000)
 		} else if config.HumanReadable {
-			sizeStr = formatSize(size, 1024)
+			sizeStr = size.FormatSize(fileSize, 1024)
 		} else {
-			sizeStr = fmt.Sprintf("%d", size)
+			sizeStr = fmt.Sprintf("%d", fileSize)
 		}
 
-		name := entry.Name()
+		name := dirEntry.Name()
 		if config.Escape {
-			name = quoteName(name)
+			name = QuoteName(name)
 		}
 
 		var entryTime time.Time
-		if ce, ok := entry.(*cachedDirEntry); ok && ce.time != nil {
-			entryTime = *ce.time
+		if ce, ok := dirEntry.(*entry.CachedDirEntry); ok && ce.Time != nil {
+			entryTime = *ce.Time
 		} else {
-			entryTime = getEntryTime(info, config.TimeField)
+			entryTime = timeutil.GetEntryTime(info, config.TimeField)
 		}
 
 		d := fileDetails{
@@ -153,12 +158,31 @@ func printLongList(w io.Writer, entries []os.DirEntry, config *Config) {
 	}
 	for _, d := range details {
 		format, args := longListFormatArgs(d, widths, config)
-		_, _ = fmt.Fprintf(w, format, args...)
+		_, _ = fmt.Fprintf(stdout, format, args...)
 	}
 }
 
-func longListFormatArgs(d fileDetails, widths longListWidths, config *Config) (string, []interface{}) {
-	timeStr := formatTime(d.modTime, config)
+type fileDetails struct {
+	mode    string
+	nlink   uint64
+	owner   string
+	author  string
+	group   string
+	sizeStr string
+	modTime time.Time
+	name    string
+}
+
+type longListWidths struct {
+	link   int
+	owner  int
+	author int
+	group  int
+	size   int
+}
+
+func longListFormatArgs(d fileDetails, widths longListWidths, config *config.Config) (string, []interface{}) {
+	timeStr := timeutil.FormatTime(d.modTime, config)
 	switch {
 	case config.ShowAuthor && config.NoGroup:
 		return "%s %*d %-*s %-*s %*s %s %s\n", []interface{}{
@@ -206,7 +230,7 @@ func longListFormatArgs(d fileDetails, widths longListWidths, config *Config) (s
 
 // printEntries prints entry names to the output writer.
 // It detects if the writer is a terminal to format output in columns.
-func printEntries(w io.Writer, names []string) {
+func PrintEntries(w io.Writer, names []string) {
 	if len(names) == 0 {
 		return
 	}
@@ -215,8 +239,8 @@ func printEntries(w io.Writer, names []string) {
 	isTerminal := false
 	if f, ok := w.(interface{ Fd() uintptr }); ok {
 		fd := int(f.Fd())
-		if isTerminalFunc(fd) {
-			width, _, err := getTermSizeFunc(fd)
+		if IsTerminalFunc(fd) {
+			width, _, err := GetTermSizeFunc(fd)
 			if err == nil {
 				termWidth = width
 				isTerminal = true
@@ -225,7 +249,7 @@ func printEntries(w io.Writer, names []string) {
 	}
 
 	if isTerminal {
-		printGrid(w, names, termWidth)
+		PrintGrid(w, names, termWidth)
 	} else {
 		// Not a terminal or failed to get size: one entry per line
 		for _, name := range names {
@@ -236,7 +260,7 @@ func printEntries(w io.Writer, names []string) {
 
 // printGrid formats names into a grid that fits within width.
 // Users column-major order (standard ls behavior).
-func printGrid(w io.Writer, names []string, width int) {
+func PrintGrid(w io.Writer, names []string, width int) {
 	if len(names) == 0 {
 		return
 	}
@@ -284,4 +308,13 @@ func printGrid(w io.Writer, names []string, width int) {
 		}
 		_, _ = fmt.Fprintln(w)
 	}
+}
+
+// For testing purposes.
+var IsTerminalFunc = func(fd int) bool {
+	return term.IsTerminal(fd)
+}
+
+var GetTermSizeFunc = func(fd int) (width, height int, err error) {
+	return term.GetSize(fd)
 }

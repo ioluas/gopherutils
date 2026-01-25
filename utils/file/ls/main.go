@@ -8,8 +8,13 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/ioluas/gopherutils/utils/file/ls/internal/config"
+	"github.com/ioluas/gopherutils/utils/file/ls/internal/display"
+	"github.com/ioluas/gopherutils/utils/file/ls/internal/entry"
+	"github.com/ioluas/gopherutils/utils/file/ls/internal/parse"
+	"github.com/ioluas/gopherutils/utils/file/ls/internal/timeutil"
+
 	"github.com/spf13/pflag"
-	"golang.org/x/term"
 )
 
 func main() {
@@ -18,7 +23,7 @@ func main() {
 
 // Execute is the entry point for the ls utility, extracted from main for testing.
 func Execute(args []string, stdout, stderr io.Writer) int {
-	config, err := ParseArgs(args, stderr)
+	config, err := parse.ParseArgs(args, stderr)
 	if err != nil {
 		if errors.Is(err, pflag.ErrHelp) {
 			return 0
@@ -46,8 +51,8 @@ func Execute(args []string, stdout, stderr io.Writer) int {
 }
 
 // run executes the ls logic for a given configuration
-func run(path string, config *Config, stdout, stderr io.Writer) int {
-	normalizeTimeConfig(config, stderr)
+func run(path string, config *config.Config, stdout, stderr io.Writer) int {
+	timeutil.NormalizeTimeConfig(config, stderr)
 	if config.ListDirectory {
 		// List the directory itself, not its contents
 		// Check if the path exists first
@@ -57,20 +62,17 @@ func run(path string, config *Config, stdout, stderr io.Writer) int {
 			return 2
 		}
 
-		entry := &cachedDirEntry{
-			DirEntry: &dirEntryWrapper{name: path, dirPath: path, isRoot: true},
-			info:     info,
-		}
+		entry := entry.NewCachedDirEntry(&entry.DirEntryWrapper{EntryName: path, DirPath: path, IsRoot: true}, info)
 		entries := []os.DirEntry{entry}
 
 		if config.LongListing {
-			printLongList(stdout, entries, config)
+			display.PrintLongList(stdout, stderr, entries, config)
 		} else {
 			name := entry.Name()
 			if config.Escape {
-				name = quoteName(name)
+				name = display.QuoteName(name)
 			}
-			printEntries(stdout, []string{name})
+			display.PrintEntries(stdout, []string{name})
 		}
 		return 0
 	}
@@ -85,12 +87,12 @@ func run(path string, config *Config, stdout, stderr io.Writer) int {
 
 	// If ShowAll is true, explicitly add "." and ".."
 	if config.ShowAll {
-		filtered = append(filtered, &cachedDirEntry{DirEntry: &dirEntryWrapper{name: ".", dirPath: path}})
-		filtered = append(filtered, &cachedDirEntry{DirEntry: &dirEntryWrapper{name: "..", dirPath: path}})
+		filtered = append(filtered, &entry.CachedDirEntry{DirEntry: &entry.DirEntryWrapper{EntryName: ".", DirPath: path}})
+		filtered = append(filtered, &entry.CachedDirEntry{DirEntry: &entry.DirEntryWrapper{EntryName: "..", DirPath: path}})
 	}
 
-	for _, entry := range entries {
-		name := entry.Name()
+	for _, dirEntry := range entries {
+		name := dirEntry.Name()
 
 		shouldInclude := true
 
@@ -113,39 +115,27 @@ func run(path string, config *Config, stdout, stderr io.Writer) int {
 		}
 
 		if shouldInclude {
-			filtered = append(filtered, &cachedDirEntry{DirEntry: entry})
+			filtered = append(filtered, &entry.CachedDirEntry{DirEntry: dirEntry})
 		}
 	}
 
 	if config.SortTime {
-		for _, e := range filtered {
-			ce := e.(*cachedDirEntry)
+		for i, e := range filtered {
+			ce, ok := e.(*entry.CachedDirEntry)
+			if !ok {
+				ce = &entry.CachedDirEntry{DirEntry: e}
+				filtered[i] = ce
+			}
 			info, err := ce.Info()
 			if err != nil {
 				continue
 			}
-			ce.info = info
-			t := getEntryTime(info, config.TimeField)
-			ce.time = &t
+			t := timeutil.GetEntryTime(info, config.TimeField)
+			ce.Time = &t
 		}
 
 		sort.Slice(filtered, func(i, j int) bool {
-			ti := filtered[i].(*cachedDirEntry).time
-			tj := filtered[j].(*cachedDirEntry).time
-
-			if ti != nil && tj != nil {
-				if ti.Equal(*tj) {
-					return filtered[i].Name() < filtered[j].Name()
-				}
-				return ti.After(*tj)
-			}
-			if ti != nil {
-				return true
-			}
-			if tj != nil {
-				return false
-			}
-			return filtered[i].Name() < filtered[j].Name()
+			return entry.LessByTime(filtered[i], filtered[j])
 		})
 	} else {
 		// Sort filtered entries by name for consistent output
@@ -183,26 +173,17 @@ func run(path string, config *Config, stdout, stderr io.Writer) int {
 	}
 
 	if config.LongListing {
-		printLongList(stdout, filtered, config)
+		display.PrintLongList(stdout, stderr, filtered, config)
 	} else {
 		names := make([]string, len(filtered))
 		for i, e := range filtered {
 			name := e.Name()
 			if config.Escape {
-				name = quoteName(name)
+				name = display.QuoteName(name)
 			}
 			names[i] = name
 		}
-		printEntries(stdout, names)
+		display.PrintEntries(stdout, names)
 	}
 	return 0
-}
-
-// For testing purposes
-var isTerminalFunc = func(fd int) bool {
-	return term.IsTerminal(fd)
-}
-
-var getTermSizeFunc = func(fd int) (width, height int, err error) {
-	return term.GetSize(fd)
 }

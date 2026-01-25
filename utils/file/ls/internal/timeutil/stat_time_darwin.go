@@ -1,6 +1,6 @@
 //go:build darwin
 
-package main
+package timeutil
 
 import (
 	"syscall"
@@ -16,5 +16,8 @@ func statCtime(stat *syscall.Stat_t) time.Time {
 }
 
 func statBirthtime(stat *syscall.Stat_t) (time.Time, bool) {
+	if stat.Birthtimespec.Sec == 0 && stat.Birthtimespec.Nsec == 0 {
+		return time.Time{}, false
+	}
 	return time.Unix(int64(stat.Birthtimespec.Sec), int64(stat.Birthtimespec.Nsec)), true
 }
