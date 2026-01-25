@@ -1,4 +1,4 @@
-//go:build !darwin
+//go:build darwin
 
 package timeutil
 
@@ -34,9 +34,9 @@ func TestGetEntryTimeWithMock(t *testing.T) {
 	birthtime := now.Add(-3 * time.Hour)
 
 	stat := &syscall.Stat_t{
-		Atim: timespecToStat(atime),
-		Ctim: timespecToStat(ctime),
-		Mtim: timespecToStat(now),
+		Atimespec: timespecToStat(atime),
+		Ctimespec: timespecToStat(ctime),
+		Mtimespec: timespecToStat(now),
 	}
 
 	// Mock stat with birthtime if supported
@@ -104,5 +104,5 @@ func timespecToStat(t time.Time) syscall.Timespec {
 func setBirthtime(stat *syscall.Stat_t, t time.Time) {
 	// This is a simplified version for testing purposes and may not be
 	// portable across all platforms.
-	stat.Ctim = timespecToStat(t)
+	stat.Birthtimespec = timespecToStat(t)
 }
