@@ -519,10 +519,10 @@ func parseBlockSize(raw string) (BlockSizeSpec, string, bool) {
 			break
 		}
 	}
-	switch {
-	case nonDigitIdx == -1:
+	switch nonDigitIdx {
+	case -1:
 		numStr = trimmed
-	case nonDigitIdx == 0:
+	case 0:
 		suffix = trimmed
 	default:
 		numStr = trimmed[:nonDigitIdx]
