@@ -2334,12 +2334,15 @@ func TestGetEntryTimeVarious(t *testing.T) {
 	// 4. Change time
 	_ = timeutil.GetEntryTime(info, lsconfig.TimeFieldChange)
 
-	// 5. Birthtime fallback
-	// Use sys: nil to ensure timeutil.GetEntryTime falls back to ModTime reliably across platforms.
-	info = &mockFileInfo{modTime: now, sys: nil}
+	// 5. Birthtime fallback: Provide a mock Stat_t where birthtime is explicitly zeroed.
+	// An empty syscall.Stat_t{} will have all its timespec fields zeroed,
+	// which causes timeutil.statBirthtime to return (time.Time{}, false) on platforms
+	// where birthtime is supported (like Darwin) and it is not present.
+	// On Linux, timeutil.statBirthtime always returns (time.Time{}, false) anyway.
+	info = &mockFileInfo{modTime: now, sys: &syscall.Stat_t{}}
 	got = timeutil.GetEntryTime(info, lsconfig.TimeFieldBirth)
 	if !got.Equal(now) {
-		t.Errorf("Expected fallback to ModTime for birth, got %v", got)
+		t.Errorf("Expected fallback to ModTime for birth when birthtime is not present (zeroed), got %v", got)
 	}
 }
 
