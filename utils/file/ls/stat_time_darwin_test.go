@@ -13,9 +13,9 @@ func TestStatTimeDarwin(t *testing.T) {
 	ctime := time.Unix(3, 4)
 	btime := time.Unix(5, 6)
 	stat := &syscall.Stat_t{
-		Atimespec:     syscall.Timespec{Sec: atime.Unix(), Nsec: int64(atime.Nanosecond())},
-		Ctimespec:     syscall.Timespec{Sec: ctime.Unix(), Nsec: int64(ctime.Nanosecond())},
-		Birthtimespec: syscall.Timespec{Sec: btime.Unix(), Nsec: int64(btime.Nanosecond())},
+		Atimespec:     syscall.Timespec{Sec: int64(atime.Unix()), Nsec: int64(atime.Nanosecond())},
+		Ctimespec:     syscall.Timespec{Sec: int64(ctime.Unix()), Nsec: int64(ctime.Nanosecond())},
+		Birthtimespec: syscall.Timespec{Sec: int64(btime.Unix()), Nsec: int64(btime.Nanosecond())},
 	}
 
 	if got := statAtime(stat); !got.Equal(atime) {

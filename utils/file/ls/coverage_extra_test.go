@@ -160,7 +160,8 @@ func TestGetEntryTimeVarious(t *testing.T) {
 
 	// 3. Access time
 	stat := &syscall.Stat_t{}
-	// Set atime if possible, but even zero is fine to test the branch
+	// On some platforms (macOS), we need to avoid literal initialization of platform-specific fields in shared tests.
+	// But empty Stat_t is generally fine.
 	info = &mockFileInfo{modTime: now, sys: stat}
 	_ = getEntryTime(info, timeFieldAccess)
 

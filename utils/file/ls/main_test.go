@@ -1808,8 +1808,8 @@ func TestRunSortByTime(t *testing.T) {
 		t.Fatalf("failed to create new file: %v", err)
 	}
 
-	oldTime := time.Now().Add(-2 * time.Hour)
-	newTime := time.Now().Add(-1 * time.Hour)
+	oldTime := time.Now().Add(-2 * time.Hour).Truncate(time.Second)
+	newTime := time.Now().Add(-1 * time.Hour).Truncate(time.Second)
 	if err := os.Chtimes(oldPath, oldTime, oldTime); err != nil {
 		t.Fatalf("failed to set times on old file: %v", err)
 	}
@@ -1830,10 +1830,10 @@ func TestRunSortByTime(t *testing.T) {
 
 	lines := strings.Split(strings.TrimSpace(stdout.String()), "\n")
 	if len(lines) < 2 {
-		t.Fatalf("Expected at least 2 lines, got %d", len(lines))
+		t.Fatalf("Expected at least 2 lines, got %d. Stdout: %q", len(lines), stdout.String())
 	}
 	if lines[0] != "new.txt" || lines[1] != "old.txt" {
-		t.Fatalf("Expected newest first, got %v", lines)
+		t.Fatalf("Expected newest first (new.txt, old.txt), got %v. File times: new=%v, old=%v", lines, newTime, oldTime)
 	}
 }
 

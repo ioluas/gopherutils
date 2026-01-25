@@ -27,7 +27,7 @@ func GetOwnerGroup(stat *syscall.Stat_t) (string, string) {
 
 func resolveUser(uid uint32) string {
 	uidStr := strconv.FormatUint(uint64(uid), 10)
-	if v, ok := userCache.Load(uid); ok {
+	if v, ok := userCache.Load(uint32(uid)); ok {
 		return v.(string)
 	}
 
@@ -35,13 +35,13 @@ func resolveUser(uid uint32) string {
 	if err != nil {
 		return uidStr
 	}
-	userCache.Store(uid, u.Username)
+	userCache.Store(uint32(uid), u.Username)
 	return u.Username
 }
 
 func resolveGroup(gid uint32) string {
 	gidStr := strconv.FormatUint(uint64(gid), 10)
-	if v, ok := groupCache.Load(gid); ok {
+	if v, ok := groupCache.Load(uint32(gid)); ok {
 		return v.(string)
 	}
 
@@ -49,6 +49,6 @@ func resolveGroup(gid uint32) string {
 	if err != nil {
 		return gidStr
 	}
-	groupCache.Store(gid, g.Name)
+	groupCache.Store(uint32(gid), g.Name)
 	return g.Name
 }
