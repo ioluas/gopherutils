@@ -32,9 +32,7 @@ func ParseTimeStyle(raw string) (*config.TimeStyleSpec, string, bool) {
 	if style == "" {
 		return nil, "missing TIME_STYLE", false
 	}
-	if strings.HasPrefix(style, "posix-") {
-		style = strings.TrimPrefix(style, "posix-")
-	}
+	style = strings.TrimPrefix(style, "posix-")
 
 	switch style {
 	case "full-iso":
