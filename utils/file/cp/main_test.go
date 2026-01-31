@@ -302,6 +302,29 @@ func TestExecute(t *testing.T) {
 		}
 		checkContent(src, "hard content")
 	})
+
+	t.Run("Preserve file permissions", func(t *testing.T) {
+		const testMode os.FileMode = 0755
+		src := createFile("mode_src.txt", "content")
+		if err := os.Chmod(src, testMode); err != nil {
+			t.Fatalf("chmod: %v", err)
+		}
+		dst := filepath.Join(tempDir, "mode_dst.txt")
+		out, err := runCp(src, dst)
+		if err != nil {
+			t.Errorf("cp failed: %v", err)
+		}
+		if out != "" {
+			t.Errorf("unexpected output: %s", out)
+		}
+		dstFi, err := os.Stat(dst)
+		if err != nil {
+			t.Fatalf("stat dst: %v", err)
+		}
+		if dstFi.Mode().Perm() != testMode.Perm() {
+			t.Errorf("mode mismatch: expected %v, got %v", testMode.Perm(), dstFi.Mode().Perm())
+		}
+	})
 }
 
 func runCp(args ...string) (string, error) {

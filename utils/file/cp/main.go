@@ -113,7 +113,7 @@ func copyFile(src, dst string, cfg *config.Config, stdout io.Writer) error {
 	// Create creates or truncates the named file. If the file already exists,
 	// it is truncated. If the file does not exist, it is created with mode 0666
 	// (before umask).
-	destFile, err := os.Create(dst)
+	destFile, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, sourceInfo.Mode().Perm())
 	if err != nil {
 		return err
 	}
