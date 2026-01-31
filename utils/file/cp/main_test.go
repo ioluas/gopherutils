@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -247,6 +248,59 @@ func TestExecute(t *testing.T) {
 		if !strings.Contains(out, "permission denied") {
 			t.Errorf("expected permission denied error: got %q", out)
 		}
+	})
+
+	t.Run("Fail permission denied on dest dir for multiple sources", func(t *testing.T) {
+		src1 := createFile("mperm_src1.txt", "content1")
+		src2 := createFile("mperm_src2.txt", "content2")
+		dstDir := filepath.Join(tempDir, "mreadonly_dir")
+		if err := os.Mkdir(dstDir, 0555); err != nil { // read-only dir (no write)
+			t.Fatalf("failed to create dir: %v", err)
+		}
+		defer func() { _ = os.Chmod(dstDir, 0755) }()
+
+		out, err := runCp(src1, src2, dstDir)
+		if err == nil {
+			t.Error("should fail")
+		}
+		if !strings.Contains(out, "cannot copy") || !strings.Contains(out, "permission denied") {
+			t.Errorf("expected 'cannot copy' and 'permission denied': got %q", out)
+		}
+		// Verify no files created
+		if _, err := os.Stat(filepath.Join(dstDir, "mperm_src1.txt")); err == nil {
+			t.Error("unexpected file created")
+		}
+	})
+
+	t.Run("Copy file to itself", func(t *testing.T) {
+		src := createFile("self.txt", "content")
+		out, err := runCp(src, src)
+		if err == nil {
+			t.Error("cp should fail when source and destination are the same file")
+		}
+		if !strings.Contains(out, "are the same file") {
+			t.Errorf("expected 'are the same file' error: got %q", out)
+		}
+		checkContent(src, "content")
+	})
+
+	t.Run("Copy file to its hardlink", func(t *testing.T) {
+		if runtime.GOOS != "linux" {
+			t.Skip("Hardlinks are Linux-specific")
+		}
+		src := createFile("hard_src.txt", "hard content")
+		linkPath := filepath.Join(tempDir, "hard_link.txt")
+		if err := os.Link(src, linkPath); err != nil {
+			t.Fatalf("failed to create hardlink: %v", err)
+		}
+		out, err := runCp(src, linkPath)
+		if err == nil {
+			t.Error("cp should fail when copying to hardlink")
+		}
+		if !strings.Contains(out, "are the same file") {
+			t.Errorf("expected 'are the same file' error: got %q", out)
+		}
+		checkContent(src, "hard content")
 	})
 }
 

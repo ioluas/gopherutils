@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"syscall"
 
 	"github.com/ioluas/gopherutils/utils/file/cp/internal/config"
 	"github.com/ioluas/gopherutils/utils/file/cp/internal/parse"
@@ -29,7 +30,15 @@ func Execute(args []string, stdout, stderr io.Writer) int {
 	// Handle multiple sources -> Directory
 	if len(cfg.Sources) > 1 {
 		destInfo, err := os.Stat(cfg.Dest)
-		if err != nil || !destInfo.IsDir() {
+		if err != nil {
+			if os.IsNotExist(err) {
+				_, _ = fmt.Fprintf(stderr, "cp: target '%s' is not a directory\n", cfg.Dest)
+			} else {
+				_, _ = fmt.Fprintf(stderr, "cp: cannot stat '%s': %v\n", cfg.Dest, err)
+			}
+			return 1
+		}
+		if !destInfo.IsDir() {
 			_, _ = fmt.Fprintf(stderr, "cp: target '%s' is not a directory\n", cfg.Dest)
 			return 1
 		}
@@ -48,11 +57,23 @@ func Execute(args []string, stdout, stderr io.Writer) int {
 	src := cfg.Sources[0]
 	dst := cfg.Dest
 	if err := copyFile(src, dst, cfg, stdout); err != nil {
-		_, _ = fmt.Fprintf(stderr, "cp: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "cp: cannot copy '%s' to '%s': %v\n", src, dst, err)
 		return 1
 	}
 
 	return 0
+}
+
+func sameDevIno(sourceInfo, destInfo os.FileInfo) bool {
+	s1, ok1 := sourceInfo.Sys().(*syscall.Stat_t)
+	if !ok1 {
+		return false
+	}
+	s2, ok2 := destInfo.Sys().(*syscall.Stat_t)
+	if !ok2 {
+		return false
+	}
+	return s1.Dev == s2.Dev && s1.Ino == s2.Ino
 }
 
 func copyFile(src, dst string, cfg *config.Config, stdout io.Writer) error {
@@ -68,6 +89,13 @@ func copyFile(src, dst string, cfg *config.Config, stdout io.Writer) error {
 	destInfo, err := os.Stat(dst)
 	if err == nil && destInfo.IsDir() {
 		dst = filepath.Join(dst, filepath.Base(src))
+	}
+
+	// Detect if source and final dst refer to the same file
+	if dstFi, err := os.Stat(dst); err == nil {
+		if sameDevIno(sourceInfo, dstFi) {
+			return fmt.Errorf("'%s' and '%s' are the same file", src, dst)
+		}
 	}
 
 	if cfg.Verbose {
