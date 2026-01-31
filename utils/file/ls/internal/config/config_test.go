@@ -20,7 +20,7 @@ func TestQuotingStyleString(t *testing.T) {
 
 	for _, tt := range tests {
 		if got := tt.style.String(); got != tt.expected {
-			t.Fatalf("QuotingStyle(%d).String() = %q, want %q", tt.style, got, tt.expected)
+			t.Errorf("QuotingStyle(%d).String() = %q, want %q", tt.style, got, tt.expected)
 		}
 	}
 }

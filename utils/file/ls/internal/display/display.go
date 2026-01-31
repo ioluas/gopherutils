@@ -119,6 +119,10 @@ func PrintLongList(stdout, stderr io.Writer, entries []os.DirEntry, config *lsco
 	}
 
 	var hadError bool
+	effectiveStyle := config.QuotingStyle
+	if effectiveStyle == lsconfig.QuotingStyleLiteral && config.Escape {
+		effectiveStyle = lsconfig.QuotingStyleEscape
+	}
 
 	// Gather all file info
 	details := make([]fileDetails, 0, len(entries))
@@ -174,11 +178,7 @@ func PrintLongList(stdout, stderr io.Writer, entries []os.DirEntry, config *lsco
 		}
 
 		name := dirEntry.Name()
-		style := config.QuotingStyle
-		if style == lsconfig.QuotingStyleLiteral && config.Escape {
-			style = lsconfig.QuotingStyleEscape
-		}
-		name = Quote(name, style)
+		name = Quote(name, effectiveStyle)
 
 		var entryTime time.Time
 		if ce, ok := dirEntry.(*entry.CachedDirEntry); ok && ce.Time != nil {
@@ -275,7 +275,7 @@ func PrintLongList(stdout, stderr io.Writer, entries []os.DirEntry, config *lsco
 			_, _ = fmt.Fprintf(stdout, " %d", off)
 		}
 		_, _ = fmt.Fprintln(stdout)
-		_, _ = fmt.Fprintf(stdout, "//DIRED-OPTIONS// --quoting-style=%s\n", config.QuotingStyle.String())
+		_, _ = fmt.Fprintf(stdout, "//DIRED-OPTIONS// --quoting-style=%s\n", effectiveStyle.String())
 	}
 	return hadError
 }

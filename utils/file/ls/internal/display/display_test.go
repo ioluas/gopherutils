@@ -93,6 +93,109 @@ func TestQuoteName(t *testing.T) {
 	}
 }
 
+func TestQuoteQuotingStyles(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		style    config.QuotingStyle
+		escape   bool
+		expected string
+	}{
+		{
+			name:     "literal",
+			input:    "file\nname",
+			style:    config.QuotingStyleLiteral,
+			expected: "file\nname",
+		},
+		{
+			name:     "literal with escape override",
+			input:    "file\nname",
+			style:    config.QuotingStyleLiteral,
+			escape:   true,
+			expected: `file\nname`,
+		},
+		{
+			name:     "escape",
+			input:    "file\tname",
+			style:    config.QuotingStyleEscape,
+			expected: `file\tname`,
+		},
+		{
+			name:     "locale wraps escaped content",
+			input:    "file\nname",
+			style:    config.QuotingStyleLocale,
+			expected: "\u2018file\\nname\u2019",
+		},
+		{
+			name:     "shell no quoting needed",
+			input:    "plain",
+			style:    config.QuotingStyleShell,
+			expected: "plain",
+		},
+		{
+			name:     "shell with space",
+			input:    "two words",
+			style:    config.QuotingStyleShell,
+			expected: "'two words'",
+		},
+		{
+			name:     "shell always",
+			input:    "plain",
+			style:    config.QuotingStyleShellAlways,
+			expected: "'plain'",
+		},
+		{
+			name:     "shell escape",
+			input:    "two words",
+			style:    config.QuotingStyleShellEscape,
+			expected: "'two words'",
+		},
+		{
+			name:     "shell escape always",
+			input:    "plain",
+			style:    config.QuotingStyleShellEscapeAlways,
+			expected: "'plain'",
+		},
+		{
+			name:     "shell empty",
+			input:    "",
+			style:    config.QuotingStyleShell,
+			expected: "''",
+		},
+		{
+			name:     "shell always empty",
+			input:    "",
+			style:    config.QuotingStyleShellAlways,
+			expected: "''",
+		},
+		{
+			name:     "c style",
+			input:    "file\nname",
+			style:    config.QuotingStyleC,
+			expected: "\"file\\nname\"",
+		},
+		{
+			name:     "default branch",
+			input:    "file\nname",
+			style:    config.QuotingStyle(99),
+			expected: "file\nname",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			style := tt.style
+			if style == config.QuotingStyleLiteral && tt.escape {
+				style = config.QuotingStyleEscape
+			}
+			got := Quote(tt.input, style)
+			if got != tt.expected {
+				t.Errorf("Quote(%q, %v) = %q; want %q", tt.input, tt.style, got, tt.expected)
+			}
+		})
+	}
+}
+
 func TestLongListFormatArgsCombinations(t *testing.T) {
 	d := fileDetails{
 		mode:    "-rw-r--r--",

@@ -84,7 +84,7 @@ test:
 coverage:
 	@echo "Running tests with coverage..."
 	@$(GO) test -coverprofile=coverage.txt -covermode=atomic ./...
-	@$(GO) tool cover -html=coverage.txt
+	@echo "To view coverage report, run: go tool cover -html=coverage.txt"
 
 # Format all Go code
 .PHONY: fmt
