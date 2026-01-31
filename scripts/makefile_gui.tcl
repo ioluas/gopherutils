@@ -3,7 +3,12 @@
 package require Tk
 
 # Global variables
-set ::prefix "$::env(HOME)/.local"
+catch { set home $::env(HOME) }
+if { [ info exists home ] } {
+    set ::prefix [ file join $home ".local" ]
+} else {
+    set ::prefix [ file join [ pwd ] ".local" ]
+}
 set ::pipe {}
 set ::running 0
 set ::current_target {}
@@ -78,8 +83,7 @@ proc start_make {target} {
     if {$target eq "install"} {
         lappend cmd "INSTALL_PREFIX=$::prefix"
     }
-    set pipe_cmd "| [join $cmd { }] 2>&1"
-    set ::pipe [open $pipe_cmd r]
+    set ::pipe [open [linsert $cmd 0 "|"] r]
     fconfigure $::pipe -buffering none -blocking 0
     fileevent $::pipe readable read_pipe
 }

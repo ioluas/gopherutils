@@ -95,8 +95,8 @@ func quoteLocale(name string) string {
 }
 
 // ShellQuote quotes a filename for shell usage.
-// It wraps the name in single quotes if it contains characters that require quoting.
-// Single quotes inside the string are escaped as '\”.
+// It delegates to quoteShell(name, false), wrapping the name in single quotes if needed.
+// Embedded single quotes are escaped as '\” (close quote, literal '\', reopen quote).
 func ShellQuote(name string) string {
 	return quoteShell(name, false)
 }
