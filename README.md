@@ -11,7 +11,7 @@ Personal project to implement Linux coreutils in Go.
 | Command    | Description                                    | Documentation                     | Status   |
 |------------|------------------------------------------------|-----------------------------------|:---------|
 | `ls`       | List directory contents                        | [README](utils/file/ls/README.md) | &#9083;  |
-| `cp`       | Copy files and directories                     |                                   | &#10007; |
+| `cp`       | Copy files and directories                     | [README](utils/file/cp/README.md) | &#9083;  |
 | `mv`       | Move (rename) files                            |                                   | &#10007; |
 | `rm`       | Remove files or directories                    |                                   | &#10007; |
 | `unlink`   | Remove a file                                  |                                   | &#10007; |

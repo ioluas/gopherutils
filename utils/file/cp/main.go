@@ -1,0 +1,103 @@
+package main
+
+import (
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+
+	"github.com/ioluas/gopherutils/utils/file/cp/internal/config"
+	"github.com/ioluas/gopherutils/utils/file/cp/internal/parse"
+	"github.com/spf13/pflag"
+)
+
+func main() {
+	os.Exit(Execute(os.Args[1:], os.Stdout, os.Stderr))
+}
+
+func Execute(args []string, stdout, stderr io.Writer) int {
+	cfg, err := parse.Args(args, stderr)
+	if err != nil {
+		if errors.Is(err, pflag.ErrHelp) {
+			return 0
+		}
+		_, _ = fmt.Fprintf(stderr, "cp: %v\n", err)
+		return 1
+	}
+
+	// Handle multiple sources -> Directory
+	if len(cfg.Sources) > 1 {
+		destInfo, err := os.Stat(cfg.Dest)
+		if err != nil || !destInfo.IsDir() {
+			_, _ = fmt.Fprintf(stderr, "cp: target '%s' is not a directory\n", cfg.Dest)
+			return 1
+		}
+
+		for _, src := range cfg.Sources {
+			dst := filepath.Join(cfg.Dest, filepath.Base(src))
+			if err := copyFile(src, dst, cfg, stdout); err != nil {
+				_, _ = fmt.Fprintf(stderr, "cp: cannot copy '%s' to '%s': %v\n", src, dst, err)
+				return 1
+			}
+		}
+		return 0
+	}
+
+	// Single source -> Destination (File or Dir)
+	src := cfg.Sources[0]
+	dst := cfg.Dest
+	if err := copyFile(src, dst, cfg, stdout); err != nil {
+		_, _ = fmt.Fprintf(stderr, "cp: %v\n", err)
+		return 1
+	}
+
+	return 0
+}
+
+func copyFile(src, dst string, cfg *config.Config, stdout io.Writer) error {
+	sourceInfo, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+	if sourceInfo.IsDir() {
+		return fmt.Errorf("omitting directory '%s'", src)
+	}
+
+	// Check if dst is a directory
+	destInfo, err := os.Stat(dst)
+	if err == nil && destInfo.IsDir() {
+		dst = filepath.Join(dst, filepath.Base(src))
+	}
+
+	if cfg.Verbose {
+		_, _ = fmt.Fprintf(stdout, "'%s' -> '%s'\n", src, dst)
+	}
+
+	sourceFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer func(sourceFile *os.File) {
+		_ = sourceFile.Close()
+	}(sourceFile)
+
+	// Create creates or truncates the named file. If the file already exists,
+	// it is truncated. If the file does not exist, it is created with mode 0666
+	// (before umask).
+	destFile, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer func(destFile *os.File) {
+		_ = destFile.Close()
+	}(destFile)
+
+	_, err = io.Copy(destFile, sourceFile)
+	if err != nil {
+		return err
+	}
+
+	// Flush to disk
+	return destFile.Sync()
+}
