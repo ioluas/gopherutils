@@ -349,6 +349,26 @@ func TestParseArgs(t *testing.T) {
 			},
 		},
 		{
+			name:        "-1 flag only",
+			args:        []string{"-1"},
+			expectError: false,
+			checkConfig: func(t *testing.T, config *config.Config) {
+				if !config.OnePerLine {
+					t.Error("Expected OnePerLine to be true")
+				}
+			},
+		},
+		{
+			name:        "--one-file-per-line flag",
+			args:        []string{"--one-file-per-line"},
+			expectError: false,
+			checkConfig: func(t *testing.T, config *config.Config) {
+				if !config.OnePerLine {
+					t.Error("Expected OnePerLine to be true")
+				}
+			},
+		},
+		{
 			name:        "unknown flag",
 			args:        []string{"-x"},
 			expectError: true,

@@ -125,5 +125,19 @@ func ParseArgs(args []string, stderr io.Writer) (*config.Config, error) {
 		}
 	}
 
+	// Determine which format flag was specified last (GNU ls behavior)
+	// Scan args from right to left to find the last occurrence of -C or -1
+	cfg.FormatMode = config.FormatDefault
+	for i := len(args) - 1; i >= 0; i-- {
+		arg := args[i]
+		if arg == "-C" || arg == "--C" {
+			cfg.FormatMode = config.FormatColumnate
+			break
+		} else if arg == "-1" || arg == "--one-file-per-line" {
+			cfg.FormatMode = config.FormatOnePerLine
+			break
+		}
+	}
+
 	return cfg, nil
 }

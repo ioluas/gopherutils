@@ -1,0 +1,160 @@
+# CodeRabbit Configuration for gopherutils
+# A Go implementation of Linux coreutils
+# https://docs.coderabbit.ai/reference/configuration
+
+# General Settings
+language: "en-GB"
+tone_instructions: "Be concise and focus on best practices for Go development and Unix utility implementation."
+early_access: false
+enable_free_tier: true
+
+# Code Reviews
+reviews:
+  # Review profile - "chill" for less strict, "assertive" for more thorough
+  profile: "assertive"
+  
+  # Request changes workflow - set to true to request changes instead of just commenting
+  request_changes_workflow: false
+  
+  # High-level summary settings
+  high_level_summary: true
+  high_level_summary_placeholder: "@coderabbitai summary"
+  
+  # Auto-review settings
+  auto_review:
+    enabled: true
+    auto_incremental_review: true
+    drafts: false
+    
+  # Review features
+  review_status: true
+  collapse_walkthrough: false
+  changed_files_summary: true
+  sequence_diagrams: true
+  estimate_code_review_effort: true
+  assess_linked_issues: true
+  related_issues: true
+  related_prs: true
+  poem: true
+  
+  # Path filters - exclude generated files and vendor directories
+  path_filters:
+    - "!vendor/**"
+    - "!**/testdata/**"
+    - "!coverage.out"
+    - "!coverage.txt"
+    - "!*.png"
+    - "!*.jpg"
+    - "!*.jpeg"
+    - "!*.gif"
+  
+  # Path-specific instructions
+  path_instructions:
+    - path: "**/*_test.go"
+      instructions: |
+        - Ensure tests follow Go testing best practices
+        - Check for table-driven tests where appropriate
+        - Verify test coverage for edge cases
+        - Ensure proper cleanup with t.Cleanup() or defer
+        - Check for race conditions in concurrent tests
+    
+    - path: "utils/file/ls/**"
+      instructions: |
+        - Ensure compatibility with GNU ls behavior
+        - Check for proper error handling and user-friendly error messages
+        - Verify flag parsing follows POSIX conventions
+        - Ensure cross-platform compatibility where possible
+    
+    - path: "**/internal/**"
+      instructions: |
+        - Verify internal packages are properly encapsulated
+        - Check for clear separation of concerns
+        - Ensure good documentation for internal APIs
+  
+  # Finishing touches
+  finishing_touches:
+    # Docstrings/comments
+    docstrings:
+      enabled: true
+    
+    # Unit tests
+    unit_tests:
+      enabled: true
+  
+  # Pre-merge checks
+  pre_merge_checks:
+    # Docstring coverage
+    docstrings:
+      mode: "warning"
+      threshold: 80
+    
+    # PR title requirements
+    title:
+      mode: "warning"
+      requirements: "Title should be descriptive and follow conventional commit format when possible"
+    
+    # PR description requirements
+    description:
+      mode: "warning"
+    
+    # Issue assessment
+    issue_assessment:
+      mode: "warning"
+  
+  # Tools configuration
+  tools:
+    # golangci-lint for Go code quality
+    golangci-lint:
+      enabled: true
+    
+    # shellcheck for shell scripts
+    shellcheck:
+      enabled: true
+    
+    # yamllint for YAML files
+    yamllint:
+      enabled: true
+    
+    # markdownlint for documentation
+    markdownlint:
+      enabled: true
+    
+    # GitHub checks integration
+    github-checks:
+      enabled: true
+      timeout_ms: 90000
+    
+    # gitleaks for secret detection
+    gitleaks:
+      enabled: true
+    
+    # actionlint for GitHub Actions workflows
+    actionlint:
+      enabled: true
+
+# Chat
+chat:
+  auto_reply: true
+
+# Knowledge Base
+knowledge_base:
+  # Enable learnings from previous reviews
+  learnings: true
+  
+  # Opt-in to sharing learnings (helps improve CodeRabbit)
+  opt_out: false
+
+# Code Generation
+code_generation:
+  # Enable code generation features
+  enabled: true
+  
+  # Instructions for code generation
+  instructions: |
+    - Follow Go best practices and idioms
+    - Use standard library when possible
+    - Ensure compatibility with GNU coreutils behavior
+    - Write comprehensive tests for new code
+    - Add godoc comments for exported functions and types
+    - Handle errors explicitly and provide helpful error messages
+    - Consider cross-platform compatibility (Linux, macOS, BSD)

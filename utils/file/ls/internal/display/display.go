@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/ioluas/gopherutils/internal/fsutil"
-	"github.com/ioluas/gopherutils/utils/file/ls/internal/config"
+	lsconfig "github.com/ioluas/gopherutils/utils/file/ls/internal/config"
 	"github.com/ioluas/gopherutils/utils/file/ls/internal/entry"
 	"github.com/ioluas/gopherutils/utils/file/ls/internal/size"
 	"github.com/ioluas/gopherutils/utils/file/ls/internal/timeutil"
@@ -48,7 +48,7 @@ func QuoteName(name string) string {
 	return b.String()
 }
 
-func PrintLongList(stdout, stderr io.Writer, entries []os.DirEntry, config *config.Config) bool {
+func PrintLongList(stdout, stderr io.Writer, entries []os.DirEntry, config *lsconfig.Config) bool {
 	if len(entries) == 0 {
 		return false
 	}
@@ -191,7 +191,7 @@ type longListWidths struct {
 	size   int
 }
 
-func longListFormatArgs(d fileDetails, widths longListWidths, config *config.Config) (string, []interface{}) {
+func longListFormatArgs(d fileDetails, widths longListWidths, config *lsconfig.Config) (string, []interface{}) {
 	timeStr := timeutil.FormatTime(d.modTime, config)
 	switch {
 	case config.ShowAuthor && config.NoGroup:
@@ -240,7 +240,7 @@ func longListFormatArgs(d fileDetails, widths longListWidths, config *config.Con
 
 // printEntries prints entry names to the output writer.
 // It detects if the writer is a terminal to format output in columns.
-func PrintEntries(w io.Writer, names []string, config *config.Config) {
+func PrintEntries(w io.Writer, names []string, config *lsconfig.Config) {
 	if len(names) == 0 {
 		return
 	}
@@ -258,16 +258,21 @@ func PrintEntries(w io.Writer, names []string, config *config.Config) {
 		}
 	}
 
-	forceColumnate := config != nil && config.Columnate
-	forceOnePerLine := config != nil && config.OnePerLine
-
+	// Determine output format based on FormatMode (last flag wins)
 	useGrid := false
-	if forceColumnate {
+	switch {
+	case config != nil && config.FormatMode == lsconfig.FormatColumnate:
+		// -C was explicitly specified last
 		useGrid = true
-	} else if forceOnePerLine {
+	case config != nil && config.FormatMode == lsconfig.FormatOnePerLine:
+		// -1 was explicitly specified last
 		useGrid = false
-	} else if isTerminal {
+	case isTerminal:
+		// No explicit format flag, default to grid on terminal
 		useGrid = true
+	default:
+		// No explicit format flag, not a terminal
+		useGrid = false
 	}
 
 	if useGrid {

@@ -7,6 +7,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/ioluas/gopherutils/utils/file/ls/internal/config"
 	"github.com/ioluas/gopherutils/utils/file/ls/internal/display"
@@ -208,13 +209,16 @@ func run(path string, config *config.Config, stdout, stderr io.Writer) int {
 	return 0
 }
 
-// normalizeName prepares a filename for sorting by removing non-alphanumeric characters
-// and converting to lowercase, mimicking basic locale-aware sorting (ignoring punctuation).
+// normalizeName prepares a filename for sorting by removing punctuation
+// and converting to lowercase, supporting Unicode characters (letters, digits, marks).
+// This mimics GNU ls's locale-aware sorting behavior where punctuation is ignored.
 func normalizeName(s string) string {
 	var b strings.Builder
 	b.Grow(len(s))
 	for _, r := range s {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+		// Keep letters, digits, and combining marks (e.g., accents)
+		// This supports international characters like é, Å, ß, CJK, etc.
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || unicode.IsMark(r) {
 			b.WriteRune(r)
 		}
 	}

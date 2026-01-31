@@ -253,7 +253,7 @@ func TestPrintEntries(t *testing.T) {
 		{
 			name:       "not a terminal, no columnate",
 			names:      []string{"file1", "file2", "file3"},
-			cfg:        &config.Config{Columnate: false},
+			cfg:        &config.Config{FormatMode: config.FormatDefault},
 			isTerminal: false,
 			termWidth:  80,
 			expected:   "file1\nfile2\nfile3\n",
@@ -261,7 +261,7 @@ func TestPrintEntries(t *testing.T) {
 		{
 			name:       "terminal, no explicit columnate (defaults to grid)",
 			names:      []string{"file1", "file2", "file3"},
-			cfg:        &config.Config{Columnate: false},
+			cfg:        &config.Config{FormatMode: config.FormatDefault},
 			isTerminal: true,
 			termWidth:  80,
 			expected:   generateExpectedGridOutput([]string{"file1", "file2", "file3"}, 80),
@@ -269,7 +269,7 @@ func TestPrintEntries(t *testing.T) {
 		{
 			name:       "terminal, force one per line",
 			names:      []string{"file1", "file2", "file3"},
-			cfg:        &config.Config{OnePerLine: true},
+			cfg:        &config.Config{FormatMode: config.FormatOnePerLine},
 			isTerminal: true,
 			termWidth:  80,
 			expected:   "file1\nfile2\nfile3\n",
@@ -277,7 +277,7 @@ func TestPrintEntries(t *testing.T) {
 		{
 			name:       "terminal, columnate, single column (narrow width)",
 			names:      []string{"longfilename", "short"},
-			cfg:        &config.Config{Columnate: true},
+			cfg:        &config.Config{FormatMode: config.FormatColumnate},
 			isTerminal: true,
 			termWidth:  10,
 			expected:   generateExpectedGridOutput([]string{"longfilename", "short"}, 10),
@@ -285,7 +285,7 @@ func TestPrintEntries(t *testing.T) {
 		{
 			name:       "terminal, columnate, multiple columns",
 			names:      []string{"a", "b", "c", "d", "e"},
-			cfg:        &config.Config{Columnate: true},
+			cfg:        &config.Config{FormatMode: config.FormatColumnate},
 			isTerminal: true,
 			termWidth:  20,
 			expected:   generateExpectedGridOutput([]string{"a", "b", "c", "d", "e"}, 20),
@@ -293,7 +293,7 @@ func TestPrintEntries(t *testing.T) {
 		{
 			name:       "terminal, columnate, multiple columns, longer names",
 			names:      []string{"apple", "banana", "cherry", "date", "elderberry"},
-			cfg:        &config.Config{Columnate: true},
+			cfg:        &config.Config{FormatMode: config.FormatColumnate},
 			isTerminal: true,
 			termWidth:  30,
 			expected:   generateExpectedGridOutput([]string{"apple", "banana", "cherry", "date", "elderberry"}, 30),
@@ -301,7 +301,7 @@ func TestPrintEntries(t *testing.T) {
 		{
 			name:           "GetTermSize error, columnate true, default to 80 chars",
 			names:          []string{"file1", "file2"},
-			cfg:            &config.Config{Columnate: true},
+			cfg:            &config.Config{FormatMode: config.FormatColumnate},
 			isTerminal:     true,
 			termWidth:      80, // Terminal width doesn't matter if error occurs
 			getTermSizeErr: true,
@@ -310,7 +310,7 @@ func TestPrintEntries(t *testing.T) {
 		{
 			name:           "GetTermSize error, columnate false, consistent non-terminal style",
 			names:          []string{"file1", "file2"},
-			cfg:            &config.Config{Columnate: false},
+			cfg:            &config.Config{FormatMode: config.FormatDefault},
 			isTerminal:     true,
 			termWidth:      80, // Terminal width doesn't matter if error occurs
 			getTermSizeErr: true,

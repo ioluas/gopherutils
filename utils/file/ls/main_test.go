@@ -317,7 +317,7 @@ func TestRun(t *testing.T) {
 				}
 				return tmpDir
 			},
-			config:         &lsconfig.Config{Columnate: false},
+			config:         &lsconfig.Config{FormatMode: lsconfig.FormatDefault},
 			expectedExit:   0,
 			expectedStdout: "file1.txt\nfile2.txt\n",
 			expectedStderr: "",
@@ -334,7 +334,7 @@ func TestRun(t *testing.T) {
 				}
 				return tmpDir
 			},
-			config: &lsconfig.Config{Columnate: true},
+			config: &lsconfig.Config{FormatMode: lsconfig.FormatColumnate},
 			// Mock terminal size to ensure columnated output
 			setup: func() func() {
 				originalIsTerminalFunc := display.IsTerminalFunc
@@ -824,7 +824,6 @@ func TestExecute(t *testing.T) {
 		expectedExit   int
 		expectedStdout string
 		expectedStderr string
-		setup          func() func()
 	}{
 		{
 			name:           "success - single dir",
@@ -1378,7 +1377,7 @@ func TestPrintEntriesTerminal(t *testing.T) {
 	}
 
 	w := &mockTerminalWriter{}
-	config := &lsconfig.Config{Columnate: true}
+	config := &lsconfig.Config{FormatMode: lsconfig.FormatColumnate}
 	display.PrintEntries(w, []string{"a", "b", "c"}, config)
 	output := w.String()
 	// Should be in grid format
