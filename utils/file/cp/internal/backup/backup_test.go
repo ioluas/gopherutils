@@ -136,6 +136,9 @@ func TestMakeBackup(t *testing.T) {
 	})
 
 	t.Run("MakeBackup stat error", func(t *testing.T) {
+		if os.Getuid() == 0 {
+			t.Skip("skipping permission test as root")
+		}
 		// Create a directory and make it unreadable/unsearchable
 		subDir := filepath.Join(tempDir, "unreadable")
 		if err := os.Mkdir(subDir, 0755); err != nil {
@@ -161,6 +164,9 @@ func TestMakeBackup(t *testing.T) {
 	})
 
 	t.Run("findNextNumberedName ReadDir error", func(t *testing.T) {
+		if os.Getuid() == 0 {
+			t.Skip("skipping permission test as root")
+		}
 		// Create a directory and make it unreadable
 		subDir := filepath.Join(tempDir, "noreaddir")
 		if err := os.Mkdir(subDir, 0755); err != nil {

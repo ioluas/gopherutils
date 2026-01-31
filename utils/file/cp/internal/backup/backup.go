@@ -43,27 +43,8 @@ func MakeBackup(path string, cfg *config.Config) (string, error) {
 func determineBackupName(path string, cfg *config.Config) (string, error) {
 	method := cfg.BackupMethod
 
-	// 'existing' strategy:
-	// If numbered backups exist, use numbered.
-	// Otherwise use simple.
+	// Resolve BackupExisting: use Numbered if path.~1~ exists, else Simple.
 	if method == config.BackupExisting {
-		// Check if any numbered backup exists
-		// We check for path.~1~ (using default suffix format for check usually,
-		// but specifically the logic is: "if the file produced by the 'numbered' method already exists, make numbered backups" - wait, simplified: "numbered if numbered backups exist")
-		// Usually this means checking if `path.~1~` or similar exists.
-
-		// Actually, GNU behavior: "if ls file.~*~ shows anything, use numbered"
-		// We can try to see if file.~1~ exists.
-		// Or simpler: does the version with suffix ~ match what we want?
-
-		// Let's implement a check: does path.~1~ exist?
-		// Note: The suffix for numbered backups is hardcoded to ".~N~" in GNU cp usually?
-		// GNU cp info: "The backup suffix is '~', unless set with --suffix...
-		// The suffix is NOT used for numbered backups; they always use .~N~" -> verify this.
-		// "numbered, t: make numbered backups" -> `foo.~1~`
-		// So numbered backups ignore cfg.Suffix?
-		// Yes, typically numbered backups use `.~N~`.
-
 		firstNumbered := path + ".~1~"
 		if _, err := os.Stat(firstNumbered); err == nil {
 			method = config.BackupNumbered
@@ -72,15 +53,14 @@ func determineBackupName(path string, cfg *config.Config) (string, error) {
 		}
 	}
 
-	if method == config.BackupSimple {
+	switch method {
+	case config.BackupSimple:
 		return path + cfg.Suffix, nil
-	}
-
-	if method == config.BackupNumbered {
+	case config.BackupNumbered:
 		return findNextNumberedName(path)
+	default:
+		return "", fmt.Errorf("unsupported backup method: %v", method)
 	}
-
-	return path + cfg.Suffix, nil
 }
 
 func findNextNumberedName(path string) (string, error) {

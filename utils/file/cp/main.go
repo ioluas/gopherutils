@@ -119,19 +119,12 @@ func copyFile(src, dst string, cfg *config.Config, stdout io.Writer) error {
 		// UpdateReplaceAll falls through
 	}
 
+	backupName := ""
 	if cfg.Backup {
-		backupName, err := backup.MakeBackup(dst, cfg)
-		if err != nil {
-			return err
-		}
-		if cfg.Verbose && backupName != "" {
-			_, _ = fmt.Fprintf(stdout, "'%s' -> '%s' (backup: '%s')\n", src, dst, backupName)
-		} else if cfg.Verbose {
-			_, _ = fmt.Fprintf(stdout, "'%s' -> '%s'\n", src, dst)
-		}
-	} else {
-		if cfg.Verbose {
-			_, _ = fmt.Fprintf(stdout, "'%s' -> '%s'\n", src, dst)
+		var backupErr error
+		backupName, backupErr = backup.MakeBackup(dst, cfg)
+		if backupErr != nil {
+			return backupErr
 		}
 	}
 
@@ -160,5 +153,16 @@ func copyFile(src, dst string, cfg *config.Config, stdout io.Writer) error {
 	}
 
 	// Flush to disk
-	return destFile.Sync()
+	if err := destFile.Sync(); err != nil {
+		return err
+	}
+
+	if cfg.Verbose {
+		if backupName != "" {
+			_, _ = fmt.Fprintf(stdout, "'%s' -> '%s' (backup: '%s')\n", src, dst, backupName)
+		} else {
+			_, _ = fmt.Fprintf(stdout, "'%s' -> '%s'\n", src, dst)
+		}
+	}
+	return nil
 }

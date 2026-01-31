@@ -181,6 +181,12 @@ func TestArgs(t *testing.T) {
 			wantErr:          false,
 		},
 		{
+			name:          "Backup invalid",
+			args:          []string{"--backup=exsting", "src", "dest"},
+			wantErr:       true,
+			wantErrString: "invalid argument 'exsting' for '--backup'",
+		},
+		{
 			name:        "Suffix flag",
 			args:        []string{"-S", ".bak", "src", "dest"},
 			wantSources: []string{"src"},
@@ -294,4 +300,19 @@ func TestArgs(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("BackupEnvInvalid", func(t *testing.T) {
+		t.Setenv("VERSION_CONTROL", "exsting")
+		var stderr bytes.Buffer
+		cfg, err := Args([]string{"-b", "src", "dest"}, &stderr)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+		if !cfg.Backup {
+			t.Error("want Backup true")
+		}
+		if cfg.BackupMethod != config.BackupExisting {
+			t.Errorf("BackupMethod = %v, want BackupExisting", cfg.BackupMethod)
+		}
+	})
 }

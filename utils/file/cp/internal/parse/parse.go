@@ -88,7 +88,15 @@ func Args(args []string, stderr io.Writer) (*config.Config, error) {
 			methodStr = "existing"
 		}
 
-		cfg.BackupMethod = parseBackupMethod(methodStr)
+		bm, err := parseBackupMethod(methodStr)
+		if err != nil {
+			if flagSet.Changed("backup") {
+				return nil, fmt.Errorf("invalid argument '%s' for '--backup'", methodStr)
+			}
+			cfg.BackupMethod = config.BackupExisting
+		} else {
+			cfg.BackupMethod = bm
+		}
 	} else {
 		cfg.Backup = false
 		cfg.BackupMethod = config.BackupNone
@@ -123,18 +131,18 @@ func Args(args []string, stderr io.Writer) (*config.Config, error) {
 	return cfg, nil
 }
 
-func parseBackupMethod(s string) config.BackupMethod {
+func parseBackupMethod(s string) (config.BackupMethod, error) {
 	switch strings.ToLower(s) {
 	case "none", "off":
-		return config.BackupNone
+		return config.BackupNone, nil
 	case "numbered", "t":
-		return config.BackupNumbered
+		return config.BackupNumbered, nil
 	case "existing", "nil":
-		return config.BackupExisting
+		return config.BackupExisting, nil
 	case "simple", "never":
-		return config.BackupSimple
+		return config.BackupSimple, nil
 	default:
-		return config.BackupExisting
+		return config.BackupExisting, fmt.Errorf("invalid argument '%s' for '--backup'", s)
 	}
 }
 

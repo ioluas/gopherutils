@@ -346,10 +346,15 @@ func TestExecute(t *testing.T) {
 			t.Errorf("cp failed: %v", err)
 		}
 
-		if _, err := os.Stat(dst); err != nil {
+		fi, err := os.Stat(dst)
+		if err != nil {
 			t.Fatalf("failed to stat dst: %v", err)
 		}
-		// We expect 0755 (rwxr-xr-x)
+		gotPerm := fi.Mode().Perm()
+		wantPerm := os.FileMode(0755)
+		if gotPerm != wantPerm {
+			t.Errorf("permissions not preserved: want 0%o, got 0%o", wantPerm, gotPerm)
+		}
 	})
 
 	t.Run("Multiple sources to non-directory dest", func(t *testing.T) {
