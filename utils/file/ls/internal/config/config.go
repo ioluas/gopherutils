@@ -18,9 +18,21 @@ type Config struct {
 	NoGroup       bool // -G, --no-group: in a long listing, don't print group names
 	Escape        bool // -b, --escape: print C-style escapes for nongraphic characters
 	IgnoreBackups bool // -B, --ignore-backups: do not list implied entries ending with ~
+	Columnate     bool // -C: list entries by columns
+	OnePerLine    bool // -1: list one file per line
 	ListDirectory bool // -d, --directory: list directories themselves, not their contents
 	BlockSize     *BlockSizeSpec
+	FormatMode    FormatMode // Tracks which format flag was specified last (-C, -1, or default)
 }
+
+// FormatMode represents the output format mode
+type FormatMode int
+
+const (
+	FormatDefault    FormatMode = iota // No explicit format flag
+	FormatColumnate                    // -C was last
+	FormatOnePerLine                   // -1 was last
+)
 
 type BlockSizeMode int
 

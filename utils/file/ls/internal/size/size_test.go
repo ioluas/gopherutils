@@ -238,6 +238,16 @@ func TestFormatSizeWithBlockSpec(t *testing.T) {
 	})
 }
 
+func TestParseBlockSizeOnlyApostrophe(t *testing.T) {
+	_, warn, ok := ParseBlockSize("'")
+	if ok {
+		t.Fatal("expected failure for only apostrophe")
+	}
+	if !strings.Contains(warn, "missing SIZE") {
+		t.Fatalf("expected 'missing SIZE' warning, got %q", warn)
+	}
+}
+
 func TestShouldGroupThousands(t *testing.T) {
 	t.Setenv("LC_ALL", "")
 	t.Setenv("LANG", "")

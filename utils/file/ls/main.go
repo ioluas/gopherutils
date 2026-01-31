@@ -7,6 +7,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/ioluas/gopherutils/utils/file/ls/internal/config"
 	"github.com/ioluas/gopherutils/utils/file/ls/internal/display"
@@ -74,7 +75,7 @@ func run(path string, config *config.Config, stdout, stderr io.Writer) int {
 			if config.Escape {
 				name = display.QuoteName(name)
 			}
-			display.PrintEntries(stdout, []string{name})
+			display.PrintEntries(stdout, []string{name}, config)
 		}
 		return 0
 	}
@@ -147,7 +148,14 @@ func run(path string, config *config.Config, stdout, stderr io.Writer) int {
 	} else {
 		// Sort filtered entries by name for consistent output
 		sort.Slice(filtered, func(i, j int) bool {
-			return filtered[i].Name() < filtered[j].Name()
+			n1 := filtered[i].Name()
+			n2 := filtered[j].Name()
+			norm1 := normalizeName(n1)
+			norm2 := normalizeName(n2)
+			if norm1 != norm2 {
+				return norm1 < norm2
+			}
+			return n1 < n2
 		})
 	}
 
@@ -192,11 +200,27 @@ func run(path string, config *config.Config, stdout, stderr io.Writer) int {
 			}
 			names[i] = name
 		}
-		display.PrintEntries(stdout, names)
+		display.PrintEntries(stdout, names, config)
 	}
 
 	if hadError {
 		return 2
 	}
 	return 0
+}
+
+// normalizeName prepares a filename for sorting by removing punctuation
+// and converting to lowercase, supporting Unicode characters (letters, digits, marks).
+// This mimics GNU ls's locale-aware sorting behavior where punctuation is ignored.
+func normalizeName(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		// Keep letters, digits, and combining marks (e.g., accents)
+		// This supports international characters like é, Å, ß, CJK, etc.
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || unicode.IsMark(r) {
+			b.WriteRune(r)
+		}
+	}
+	return strings.ToLower(b.String())
 }

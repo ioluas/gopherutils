@@ -41,6 +41,8 @@ func ParseArgs(args []string, stderr io.Writer) (*config.Config, error) {
 	flagSet.BoolVarP(&cfg.NoGroup, "no-group", "G", false, "in a long listing, don't print group names")
 	flagSet.BoolVarP(&cfg.Escape, "escape", "b", false, "print C-style escapes for nongraphic characters")
 	flagSet.BoolVarP(&cfg.IgnoreBackups, "ignore-backups", "B", false, "do not list implied entries ending with ~")
+	flagSet.BoolVarP(&cfg.Columnate, "C", "C", false, "list entries by columns")
+	flagSet.BoolVarP(&cfg.OnePerLine, "one-file-per-line", "1", false, "list one file per line")
 	flagSet.BoolVarP(&cfg.ListDirectory, "directory", "d", false, "list directories themselves, not their contents")
 	flagSet.StringVar(&blockSizeRaw, "block-size", "", "with -l, scale sizes by SIZE when printing them; e.g., '--block-size=M'")
 	flagSet.BoolVarP(&showHelp, "help", "?", false, "display this help and exit")
@@ -120,6 +122,20 @@ func ParseArgs(args []string, stderr io.Writer) (*config.Config, error) {
 		}
 		if ok {
 			cfg.BlockSize = &spec
+		}
+	}
+
+	// Determine which format flag was specified last (GNU ls behavior)
+	// Scan args from right to left to find the last occurrence of -C or -1
+	cfg.FormatMode = config.FormatDefault
+	for i := len(args) - 1; i >= 0; i-- {
+		arg := args[i]
+		if arg == "-C" || arg == "--C" {
+			cfg.FormatMode = config.FormatColumnate
+			break
+		} else if arg == "-1" || arg == "--one-file-per-line" {
+			cfg.FormatMode = config.FormatOnePerLine
+			break
 		}
 	}
 

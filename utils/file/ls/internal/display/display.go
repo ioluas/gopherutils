@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/ioluas/gopherutils/internal/fsutil"
-	"github.com/ioluas/gopherutils/utils/file/ls/internal/config"
+	lsconfig "github.com/ioluas/gopherutils/utils/file/ls/internal/config"
 	"github.com/ioluas/gopherutils/utils/file/ls/internal/entry"
 	"github.com/ioluas/gopherutils/utils/file/ls/internal/size"
 	"github.com/ioluas/gopherutils/utils/file/ls/internal/timeutil"
@@ -48,7 +48,7 @@ func QuoteName(name string) string {
 	return b.String()
 }
 
-func PrintLongList(stdout, stderr io.Writer, entries []os.DirEntry, config *config.Config) bool {
+func PrintLongList(stdout, stderr io.Writer, entries []os.DirEntry, config *lsconfig.Config) bool {
 	if len(entries) == 0 {
 		return false
 	}
@@ -191,7 +191,7 @@ type longListWidths struct {
 	size   int
 }
 
-func longListFormatArgs(d fileDetails, widths longListWidths, config *config.Config) (string, []interface{}) {
+func longListFormatArgs(d fileDetails, widths longListWidths, config *lsconfig.Config) (string, []interface{}) {
 	timeStr := timeutil.FormatTime(d.modTime, config)
 	switch {
 	case config.ShowAuthor && config.NoGroup:
@@ -240,7 +240,7 @@ func longListFormatArgs(d fileDetails, widths longListWidths, config *config.Con
 
 // printEntries prints entry names to the output writer.
 // It detects if the writer is a terminal to format output in columns.
-func PrintEntries(w io.Writer, names []string) {
+func PrintEntries(w io.Writer, names []string, config *lsconfig.Config) {
 	if len(names) == 0 {
 		return
 	}
@@ -258,10 +258,31 @@ func PrintEntries(w io.Writer, names []string) {
 		}
 	}
 
-	if isTerminal {
-		PrintGrid(w, names, termWidth)
+	// Determine output format based on FormatMode (last flag wins)
+	useGrid := false
+	switch {
+	case config != nil && config.FormatMode == lsconfig.FormatColumnate:
+		// -C was explicitly specified last
+		useGrid = true
+	case config != nil && config.FormatMode == lsconfig.FormatOnePerLine:
+		// -1 was explicitly specified last
+		useGrid = false
+	case isTerminal:
+		// No explicit format flag, default to grid on terminal
+		useGrid = true
+	default:
+		// No explicit format flag, not a terminal
+		useGrid = false
+	}
+
+	if useGrid {
+		width := termWidth
+		if !isTerminal {
+			width = 80
+		}
+		PrintGrid(w, names, width)
 	} else {
-		// Not a terminal or failed to get size: one entry per line
+		// Not columnated, or not a terminal: one entry per line
 		for _, name := range names {
 			_, _ = fmt.Fprintln(w, name)
 		}
@@ -270,54 +291,69 @@ func PrintEntries(w io.Writer, names []string) {
 
 // printGrid formats names into a grid that fits within width.
 // Users column-major order (standard ls behavior).
-func PrintGrid(w io.Writer, names []string, width int) {
+func PrintGrid(w io.Writer, names []string, termWidth int) {
 	if len(names) == 0 {
 		return
 	}
-	// 1. Determine maximum name length (add 2 spaces for padding)
-	maxLen := 0
-	for _, name := range names {
-		if len(name) > maxLen {
-			maxLen = len(name)
-		}
-	}
-	colWidth := maxLen + 2 // 2 spaces padding
 
-	// 2. Determine number of columns
-	// Avoid division by zero
-	if colWidth > width {
-		colWidth = width
-	}
-	if colWidth == 0 {
-		colWidth = 1
-	}
+	n := len(names)
+	padding := 2
 
-	numCols := width / colWidth
-	if numCols == 0 {
-		numCols = 1
-	}
-	if numCols > len(names) {
-		numCols = len(names)
-	}
+	// Try with increasing number of rows
+	for rows := 1; rows <= n; rows++ {
+		cols := (n + rows - 1) / rows
 
-	// 3. Determine number of rows
-	// ceil(len(names) / numCols)
-	numRows := (len(names) + numCols - 1) / numCols
-
-	// Pre-compute format string as colWidth is constant for all entries
-	format := fmt.Sprintf("%%-%ds", colWidth)
-
-	// 4. Print in column-major order
-	// row 0:  idx 0,                idx 0+rows,            idx 0+2*rows...
-	// row r:  idx r,                idx r+rows,            ...
-	for r := 0; r < numRows; r++ {
-		for c := 0; c < numCols; c++ {
-			idx := c*numRows + r
-			if idx < len(names) {
-				_, _ = fmt.Fprintf(w, format, names[idx])
+		// Calculate width of each column
+		colWidths := make([]int, cols)
+		for c := 0; c < cols; c++ {
+			for r := 0; r < rows; r++ {
+				idx := c*rows + r
+				if idx < n {
+					l := len(names[idx])
+					if l > colWidths[c] {
+						colWidths[c] = l
+					}
+				}
 			}
 		}
-		_, _ = fmt.Fprintln(w)
+
+		// Calculate total width required
+		totalWidth := 0
+		for _, width := range colWidths {
+			totalWidth += width
+		}
+		totalWidth += (cols - 1) * padding
+
+		// If it fits, or if we are forced to 1 column (rows==n), print it
+		if totalWidth <= termWidth || rows == n {
+			for r := 0; r < rows; r++ {
+				for c := 0; c < cols; c++ {
+					idx := c*rows + r
+					if idx < n {
+						// padding only between columns
+						// Is this the last column?
+						// Note: The totalWidth check assumes all columns present.
+						// When printing, we print logical columns.
+
+						// Standard ls behavior: pad to column width, except the last column doesn't arguably need padding if it's rightmost?
+						// Actually ls usually pads all except maybe the very last visible one on the line.
+						// To be safe and consistent with format strings:
+						// printf "%-*s  " width name
+
+						if c < cols-1 {
+							// Not the last column, print with padding
+							format := fmt.Sprintf("%%-%ds", colWidths[c]+padding)
+							_, _ = fmt.Fprintf(w, format, names[idx])
+						} else {
+							// Last column, just print the name
+							_, _ = fmt.Fprint(w, names[idx])
+						}
+					}
+				}
+				_, _ = fmt.Fprintln(w)
+			}
+			return
+		}
 	}
 }
 

@@ -12,24 +12,26 @@ List information about the FILEs (the current directory by default). Sort entrie
 
 ## Options
 
-| Short Flag | Long Flag          | Description                                                        |
-|:-----------|:-------------------|:-------------------------------------------------------------------|
-| `-a`       | `--all`            | do not ignore entries starting with `.`                            |
-| `-A`       | `--almost-all`     | do not list implied `.` and `..`                                   |
-| `-l`       | `--long`           | use a long listing format                                          |
-| `-t`       |                    | sort by time, newest first; see `--time`                           |
-| `-h`       | `--human-readable` | with `-l`, print sizes in human readable format (e.g., 1K 234M 2G) |
-|            | `--si`             | with `-l`, print sizes in powers of 1000 not 1024                  |
-|            | `--block-size`     | with `-l`, scale sizes by SIZE when printing them                  |
-|            | `--time`           | select which timestamp is used to display or sort                  |
-|            | `--time-style`     | time/date format with `-l`; see TIME_STYLE below                   |
-|            | `--full-time`      | like `-l --time-style=full-iso`                                    |
-|            | `--author`         | with `-l`, print the author of each file                           |
-| `-G`       | `--no-group`       | in a long listing, don't print group names                         |
-| `-b`       | `--escape`         | print C-style escapes for nongraphic characters                    |
-| `-B`       | `--ignore-backups` | do not list implied entries ending with `~`                        |
-| `-d`       | `--directory`      | list directories themselves, not their contents                    |
-| `-?`       | `--help`           | display help text and exit                                         |
+| Short Flag | Long Flag            | Description                                                        |
+|:-----------|:---------------------|:-------------------------------------------------------------------|
+| `-a`       | `--all`              | do not ignore entries starting with `.`                            |
+| `-A`       | `--almost-all`       | do not list implied `.` and `..`                                   |
+| `-l`       | `--long`             | use a long listing format                                          |
+| `-1`       | `--one-file-per-line`| list one file per line                                             |
+| `-C`       |                      | list entries by columns (default when output is a terminal)        |
+| `-t`       |                      | sort by time, newest first; see `--time`                           |
+| `-h`       | `--human-readable`   | with `-l`, print sizes in human readable format (e.g., 1K 234M 2G) |
+|            | `--si`               | with `-l`, print sizes in powers of 1000 not 1024                  |
+|            | `--block-size`       | with `-l`, scale sizes by SIZE when printing them                  |
+|            | `--time`             | select which timestamp is used to display or sort                  |
+|            | `--time-style`       | time/date format with `-l`; see TIME_STYLE below                   |
+|            | `--full-time`        | like `-l --time-style=full-iso`                                    |
+|            | `--author`           | with `-l`, print the author of each file                           |
+| `-G`       | `--no-group`         | in a long listing, don't print group names                         |
+| `-b`       | `--escape`           | print C-style escapes for nongraphic characters                    |
+| `-B`       | `--ignore-backups`   | do not list implied entries ending with `~`                        |
+| `-d`       | `--directory`        | list directories themselves, not their contents                    |
+| `-?`       | `--help`             | display help text and exit                                         |
 
 ## SIZE format for --block-size
 
