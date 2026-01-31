@@ -50,7 +50,7 @@ Copy SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.
 |            | `--debug`                  | explain how a file is copied.  Implies -v                                            | not-implemented |
 | `-x`       | `--one-file-system`        | stay on this file system                                                             | not-implemented |
 | `-Z`       |                            | set SELinux security context of destination file to default type                     | not-implemented |
-|            | `--context[=CTX]`          | like `-Z`, or if CTX is specified then set the SELinux or SMACK security context     | not-implemented |
+|            | `--context[=CTX]`          | like `-Z`, or if CTX is specified, then set the SELinux or SMACK security context    | not-implemented |
 |            | `--help`                   | display this help and exit                                                           | done            |
 |            | `--version`                | output version information and exit                                                  | not-implemented |
 

@@ -48,8 +48,10 @@ func determineBackupName(path string, cfg *config.Config) (string, error) {
 		firstNumbered := path + ".~1~"
 		if _, err := os.Stat(firstNumbered); err == nil {
 			method = config.BackupNumbered
-		} else {
+		} else if os.IsNotExist(err) {
 			method = config.BackupSimple
+		} else {
+			return "", err
 		}
 	}
 

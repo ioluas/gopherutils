@@ -1,3 +1,5 @@
+//go:build !windows
+
 package backup
 
 import (
@@ -114,6 +116,34 @@ func TestMakeBackup(t *testing.T) {
 		expected := path + "~"
 		if name != expected {
 			t.Errorf("got name %q, want %q", name, expected)
+		}
+	})
+
+	t.Run("Existing backup (triggers error on stat)", func(t *testing.T) {
+		if os.Getuid() == 0 {
+			t.Skip("skipping permission test as root")
+		}
+		// Create a directory and make it unreadable/unsearchable
+		subDir := filepath.Join(tempDir, "stat_err_dir")
+		if err := os.Mkdir(subDir, 0755); err != nil {
+			t.Fatalf("failed to create dir: %v", err)
+		}
+		path := filepath.Join(subDir, "file")
+		if err := os.WriteFile(path, []byte("content"), 0644); err != nil {
+			t.Fatalf("failed to write file: %v", err)
+		}
+
+		// Remove search permission from subdir
+		if err := os.Chmod(subDir, 0000); err != nil {
+			t.Fatalf("failed to chmod: %v", err)
+		}
+		defer func() { _ = os.Chmod(subDir, 0755) }()
+
+		cfg := &config.Config{Backup: true, BackupMethod: config.BackupExisting}
+		// This should fail to stat path + ".~1~" because subDir is unsearchable
+		_, err := MakeBackup(path, cfg)
+		if err == nil {
+			t.Error("expected error on stat for BackupExisting")
 		}
 	})
 
