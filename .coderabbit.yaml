@@ -1,3 +1,6 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+
+
 # CodeRabbit Configuration for gopherutils
 # A Go implementation of Linux coreutils
 # https://docs.coderabbit.ai/reference/configuration
@@ -139,22 +142,11 @@ chat:
 # Knowledge Base
 knowledge_base:
   # Enable learnings from previous reviews
-  learnings: true
+  learnings:
+    scope: "local"
+
+  web_search:
+    enabled: true
   
   # Opt-in to sharing learnings (helps improve CodeRabbit)
   opt_out: false
-
-# Code Generation
-code_generation:
-  # Enable code generation features
-  enabled: true
-  
-  # Instructions for code generation
-  instructions: |
-    - Follow Go best practices and idioms
-    - Use standard library when possible
-    - Ensure compatibility with GNU coreutils behavior
-    - Write comprehensive tests for new code
-    - Add godoc comments for exported functions and types
-    - Handle errors explicitly and provide helpful error messages
-    - Consider cross-platform compatibility (Linux, macOS, BSD)

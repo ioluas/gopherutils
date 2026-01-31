@@ -50,8 +50,10 @@ func TestUnicodeSorting(t *testing.T) {
 		t.Fatal("no files were created")
 	}
 
-	// Run ls on the directory
-	config := &lsconfig.Config{}
+	// Run ls on the directory with one-file-per-line to ensure deterministic output
+	config := &lsconfig.Config{
+		FormatMode: lsconfig.FormatOnePerLine,
+	}
 	var stdout, stderr bytes.Buffer
 	exitCode := run(tmpDir, config, &stdout, &stderr)
 
