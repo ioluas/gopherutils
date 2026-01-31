@@ -14,10 +14,10 @@ enable_free_tier: true
 # Code Reviews
 reviews:
   # Review profile - "chill" for less strict, "assertive" for more thorough
-  profile: "assertive"
+  profile: "chill"
   
   # Request changes workflow - set to true to request changes instead of just commenting
-  request_changes_workflow: false
+  request_changes_workflow: true
   
   # High-level summary settings
   high_level_summary: true

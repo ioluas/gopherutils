@@ -93,6 +93,133 @@ func TestQuoteName(t *testing.T) {
 	}
 }
 
+func TestQuoteQuotingStyles(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		style    config.QuotingStyle
+		escape   bool
+		expected string
+	}{
+		{
+			name:     "literal",
+			input:    "file\nname",
+			style:    config.QuotingStyleLiteral,
+			expected: "file\nname",
+		},
+		{
+			name:     "literal with escape override",
+			input:    "file\nname",
+			style:    config.QuotingStyleLiteral,
+			escape:   true,
+			expected: `file\nname`,
+		},
+		{
+			name:     "escape",
+			input:    "file\tname",
+			style:    config.QuotingStyleEscape,
+			expected: `file\tname`,
+		},
+		{
+			name:     "locale wraps escaped content",
+			input:    "file\nname",
+			style:    config.QuotingStyleLocale,
+			expected: "\u2018file\\nname\u2019",
+		},
+		{
+			name:     "locale preserves utf8",
+			input:    "cafe-雪",
+			style:    config.QuotingStyleLocale,
+			expected: "\u2018cafe-雪\u2019",
+		},
+		{
+			name:     "locale escapes control byte",
+			input:    "a\x01b",
+			style:    config.QuotingStyleLocale,
+			expected: "\u2018a\\x01b\u2019",
+		},
+		{
+			name:     "shell no quoting needed",
+			input:    "plain",
+			style:    config.QuotingStyleShell,
+			expected: "plain",
+		},
+		{
+			name:     "shell with space",
+			input:    "two words",
+			style:    config.QuotingStyleShell,
+			expected: "'two words'",
+		},
+		{
+			name:     "shell always",
+			input:    "plain",
+			style:    config.QuotingStyleShellAlways,
+			expected: "'plain'",
+		},
+		{
+			name:     "shell preserves utf8",
+			input:    "snow-雪",
+			style:    config.QuotingStyleShellAlways,
+			expected: "'snow-雪'",
+		},
+		{
+			name:     "shell escapes control byte",
+			input:    "a\x01b",
+			style:    config.QuotingStyleShell,
+			expected: "'a\x01b'",
+		},
+		{
+			name:     "shell escape",
+			input:    "two words",
+			style:    config.QuotingStyleShellEscape,
+			expected: "$'two words'",
+		},
+		{
+			name:     "shell escape always",
+			input:    "plain",
+			style:    config.QuotingStyleShellEscapeAlways,
+			expected: "$'plain'",
+		},
+		{
+			name:     "shell empty",
+			input:    "",
+			style:    config.QuotingStyleShell,
+			expected: "''",
+		},
+		{
+			name:     "shell always empty",
+			input:    "",
+			style:    config.QuotingStyleShellAlways,
+			expected: "''",
+		},
+		{
+			name:     "c style",
+			input:    "file\nname",
+			style:    config.QuotingStyleC,
+			expected: "\"file\\nname\"",
+		},
+		{
+			name:     "default branch",
+			input:    "file\nname",
+			style:    config.QuotingStyle(99),
+			expected: "file\nname",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			style := tt.style
+			if style == config.QuotingStyleLiteral && tt.escape {
+				style = config.QuotingStyleEscape
+			}
+			got := Quote(tt.input, style)
+			if got != tt.expected {
+				t.Errorf("Quote(%q, %v) = %q; want %q", tt.input, tt.style, got, tt.expected)
+			}
+		})
+	}
+}
+
 func TestLongListFormatArgsCombinations(t *testing.T) {
 	d := fileDetails{
 		mode:    "-rw-r--r--",
@@ -115,28 +242,28 @@ func TestLongListFormatArgsCombinations(t *testing.T) {
 	// Case 1: ShowAuthor=true, NoGroup=true
 	cfg := &config.Config{ShowAuthor: true, NoGroup: true}
 	format, args := longListFormatArgs(d, widths, cfg)
-	if !strings.Contains(format, "%-*s %-*s") || len(args) != 11 {
+	if !strings.Contains(format, "%-*s %-*s") || len(args) != 10 {
 		t.Errorf("Unexpected format or args for Author+NoGroup: %q, %d", format, len(args))
 	}
 
 	// Case 2: ShowAuthor=true, NoGroup=false
 	cfg = &config.Config{ShowAuthor: true, NoGroup: false}
 	format, args = longListFormatArgs(d, widths, cfg)
-	if !strings.Contains(format, "%-*s %-*s %-*s") || len(args) != 13 {
+	if !strings.Contains(format, "%-*s %-*s %-*s") || len(args) != 12 {
 		t.Errorf("Unexpected format or args for Author: %q, %d", format, len(args))
 	}
 
 	// Case 3: ShowAuthor=false, NoGroup=true
 	cfg = &config.Config{ShowAuthor: false, NoGroup: true}
 	format, args = longListFormatArgs(d, widths, cfg)
-	if strings.Contains(format, "%-*s %-*s %-*s") || len(args) != 9 {
+	if strings.Contains(format, "%-*s %-*s %-*s") || len(args) != 8 {
 		t.Errorf("Unexpected format or args for NoGroup: %q, %d", format, len(args))
 	}
 
 	// Case 4: Default (both false)
 	cfg = &config.Config{ShowAuthor: false, NoGroup: false}
 	_, args = longListFormatArgs(d, widths, cfg)
-	if len(args) != 11 {
+	if len(args) != 10 {
 		t.Errorf("Unexpected args for default: %d", len(args))
 	}
 }
@@ -433,5 +560,26 @@ func TestPrintGrid(t *testing.T) {
 				t.Errorf("PrintGrid(%v, %d) got:\n%q\nwant:\n%q", tt.names, tt.width, actual, tt.expected)
 			}
 		})
+	}
+}
+
+func TestShellQuote(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"simple", "simple"},
+		{"file name", "'file name'"},
+		{"file\nname", "'file\nname'"},
+		{"file'name", "'file'\\''name'"},
+		{"", "''"},
+		{"foo*", "'foo*'"},
+		{"param$name", "'param$name'"},
+	}
+	for _, tt := range tests {
+		got := ShellQuote(tt.input)
+		if got != tt.expected {
+			t.Errorf("ShellQuote(%q) = %q, want %q", tt.input, got, tt.expected)
+		}
 	}
 }

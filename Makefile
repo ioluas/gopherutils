@@ -77,14 +77,14 @@ list:
 .PHONY: test
 test:
 	@echo "Running tests..."
-	@$(GO) test -race -cover ./...
+	@$(GO) test -race ./...
 
 # Run tests and generate coverage report
 .PHONY: coverage
 coverage:
 	@echo "Running tests with coverage..."
 	@$(GO) test -coverprofile=coverage.txt -covermode=atomic ./...
-	@$(GO) tool cover -html=coverage.txt
+	@echo "To view coverage report, run: go tool cover -html=coverage.txt"
 
 # Format all Go code
 .PHONY: fmt
@@ -146,3 +146,10 @@ help:
 	@echo "  staticcheck  - Run staticcheck"
 	@echo "  CQ           - Run lint, vet, staticcheck, fmt, and coverage"
 	@echo "  help         - Show this help message"
+
+
+
+.PHONY: gui
+gui:
+	@echo "Launching Makefile GUI..."
+	@./scripts/makefile_gui.tcl

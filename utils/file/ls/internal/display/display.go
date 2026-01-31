@@ -7,6 +7,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unicode"
 
 	"github.com/ioluas/gopherutils/internal/fsutil"
 	lsconfig "github.com/ioluas/gopherutils/utils/file/ls/internal/config"
@@ -48,16 +49,171 @@ func QuoteName(name string) string {
 	return b.String()
 }
 
-func PrintLongList(stdout, stderr io.Writer, entries []os.DirEntry, config *lsconfig.Config) bool {
+func escapeRuneC(r rune) string {
+	switch r {
+	case '\a':
+		return `\a`
+	case '\b':
+		return `\b`
+	case '\f':
+		return `\f`
+	case '\n':
+		return `\n`
+	case '\r':
+		return `\r`
+	case '\t':
+		return `\t`
+	case '\v':
+		return `\v`
+	case '\\':
+		return `\\`
+	case '\'':
+		return `\'`
+	case '"':
+		return `\"`
+	default:
+		if r <= 0xFF {
+			return fmt.Sprintf("\\x%02X", r)
+		}
+		if r <= 0xFFFF {
+			return fmt.Sprintf("\\u%04X", r)
+		}
+		return fmt.Sprintf("\\U%08X", r)
+	}
+}
+
+func quoteLocale(name string) string {
+	var b strings.Builder
+	for _, r := range name {
+		if unicode.IsPrint(r) && r != '\u0000' {
+			b.WriteRune(r)
+			continue
+		}
+		b.WriteString(escapeRuneC(r))
+	}
+	return "\u2018" + b.String() + "\u2019"
+}
+
+// ShellQuote quotes a filename for shell usage.
+// It delegates to quoteShell(name, false), wrapping the name in single quotes if needed.
+// Embedded single quotes are escaped as '\” (close quote, literal '\', reopen quote).
+func ShellQuote(name string) string {
+	return quoteShell(name, false)
+}
+
+func quoteShellANSI(name string, always bool) string {
+	needsQuote := false
+	if !always {
+		for _, r := range name {
+			// Characters that usually require quoting in shell
+			if r == ' ' || r == '\t' || r == '\n' || r == '\'' || r == '"' ||
+				r == '\\' || r == '$' || r == '`' || r == '(' || r == ')' ||
+				r == '<' || r == '>' || r == '|' || r == '&' || r == ';' || r == '*' ||
+				r == '?' || r == '[' || r == ']' || r == '#' || r == '~' {
+				needsQuote = true
+				break
+			}
+			// Also quote control characters (though usually ls -b changes them)
+			if r < 32 || r == 127 {
+				needsQuote = true
+				break
+			}
+		}
+	}
+
+	if !always && !needsQuote && len(name) > 0 {
+		return name
+	}
+
+	var b strings.Builder
+	b.WriteString("$'")
+	for _, r := range name {
+		if unicode.IsPrint(r) && r != '\u0000' && r != '\'' && r != '\\' {
+			b.WriteRune(r)
+			continue
+		}
+		b.WriteString(escapeRuneC(r))
+	}
+	b.WriteByte('\'')
+	return b.String()
+}
+
+func quoteShell(name string, always bool) string {
+	needsQuote := false
+	if !always {
+		for _, r := range name {
+			// Characters that usually require quoting in shell
+			if r == ' ' || r == '\t' || r == '\n' || r == '\'' || r == '"' ||
+				r == '\\' || r == '$' || r == '`' || r == '(' || r == ')' ||
+				r == '<' || r == '>' || r == '|' || r == '&' || r == ';' || r == '*' ||
+				r == '?' || r == '[' || r == ']' || r == '#' || r == '~' {
+				needsQuote = true
+				break
+			}
+			// Also quote control characters (though usually ls -b changes them)
+			if r < 32 || r == 127 {
+				needsQuote = true
+				break
+			}
+		}
+	}
+
+	if !always && !needsQuote && len(name) > 0 {
+		return name
+	}
+
+	var b strings.Builder
+	b.WriteByte('\'')
+	for _, r := range name {
+		if r == '\'' {
+			b.WriteString(`'\''`)
+		} else {
+			b.WriteRune(r)
+		}
+	}
+	b.WriteByte('\'')
+	return b.String()
+}
+
+// Quote quotes the name according to the configured style.
+func Quote(name string, style lsconfig.QuotingStyle) string {
+	switch style {
+	case lsconfig.QuotingStyleEscape:
+		return QuoteName(name)
+	case lsconfig.QuotingStyleLocale:
+		return quoteLocale(name)
+	case lsconfig.QuotingStyleShell:
+		return quoteShell(name, false)
+	case lsconfig.QuotingStyleShellAlways:
+		return quoteShell(name, true)
+	case lsconfig.QuotingStyleShellEscape:
+		return quoteShellANSI(name, false)
+	case lsconfig.QuotingStyleShellEscapeAlways:
+		return quoteShellANSI(name, true)
+	case lsconfig.QuotingStyleC:
+		escaped := strings.ReplaceAll(QuoteName(name), `"`, `\"`)
+		return `"` + escaped + `"`
+	default:
+		return name
+	}
+}
+
+func PrintLongList(stdout, stderr io.Writer, entries []os.DirEntry, config *lsconfig.Config, printTotal bool) bool {
 	if len(entries) == 0 {
 		return false
 	}
 
 	var hadError bool
+	effectiveStyle := config.QuotingStyle
+	if effectiveStyle == lsconfig.QuotingStyleLiteral && config.Escape {
+		effectiveStyle = lsconfig.QuotingStyleEscape
+	}
 
 	// Gather all file info
 	details := make([]fileDetails, 0, len(entries))
 	var maxLinkLen, maxOwnerLen, maxAuthorLen, maxGroupLen, maxSizeLen int
+	var totalBlocks int64
+
 	for _, dirEntry := range entries {
 		if ce, ok := dirEntry.(*entry.CachedDirEntry); ok && ce.Err != nil {
 			_, _ = fmt.Fprintf(stderr, "ls: cannot access '%s': %v\n", ce.Name(), ce.Err)
@@ -85,6 +241,7 @@ func PrintLongList(stdout, stderr io.Writer, entries []os.DirEntry, config *lsco
 			if config.ShowAuthor {
 				author = owner
 			}
+			totalBlocks += sysStat.Blocks
 		} else {
 			// Non-Unix fallback
 			owner = "-" // Placeholder for owner
@@ -106,9 +263,7 @@ func PrintLongList(stdout, stderr io.Writer, entries []os.DirEntry, config *lsco
 		}
 
 		name := dirEntry.Name()
-		if config.Escape {
-			name = QuoteName(name)
-		}
+		name = Quote(name, effectiveStyle)
 
 		var entryTime time.Time
 		if ce, ok := dirEntry.(*entry.CachedDirEntry); ok && ce.Time != nil {
@@ -165,9 +320,47 @@ func PrintLongList(stdout, stderr io.Writer, entries []os.DirEntry, config *lsco
 		group:  maxGroupLen,
 		size:   maxSizeLen,
 	}
+	var bc *ByteCountingWriter
+	var offsets []int64
+
+	if config.Dired {
+		bc = &ByteCountingWriter{Writer: stdout}
+		stdout = bc
+	}
+
+	if printTotal {
+		// Output block count in 1K units (standard ls behavior)
+		prefix := ""
+		if config.Dired {
+			prefix = "  "
+		}
+		_, _ = fmt.Fprintf(stdout, "%stotal %d\n", prefix, (totalBlocks+1)/2)
+	}
+
 	for _, d := range details {
 		format, args := longListFormatArgs(d, widths, config)
+		if config.Dired {
+			format = "  " + format
+		}
 		_, _ = fmt.Fprintf(stdout, format, args...)
+
+		if config.Dired {
+			offsets = append(offsets, bc.Count)
+		}
+		_, _ = fmt.Fprint(stdout, d.name)
+		if config.Dired {
+			offsets = append(offsets, bc.Count)
+		}
+		_, _ = fmt.Fprintln(stdout)
+	}
+
+	if config.Dired && len(offsets) > 0 {
+		_, _ = fmt.Fprint(stdout, "//DIRED//")
+		for _, off := range offsets {
+			_, _ = fmt.Fprintf(stdout, " %d", off)
+		}
+		_, _ = fmt.Fprintln(stdout)
+		_, _ = fmt.Fprintf(stdout, "//DIRED-OPTIONS// --quoting-style=%s\n", effectiveStyle.String())
 	}
 	return hadError
 }
@@ -195,17 +388,16 @@ func longListFormatArgs(d fileDetails, widths longListWidths, config *lsconfig.C
 	timeStr := timeutil.FormatTime(d.modTime, config)
 	switch {
 	case config.ShowAuthor && config.NoGroup:
-		return "%s %*d %-*s %-*s %*s %s %s\n", []interface{}{
+		return "%s %*d %-*s %-*s %*s %s ", []interface{}{
 			d.mode,
 			widths.link, d.nlink,
 			widths.owner, d.owner,
 			widths.author, d.author,
 			widths.size, d.sizeStr,
 			timeStr,
-			d.name,
 		}
 	case config.ShowAuthor:
-		return "%s %*d %-*s %-*s %-*s %*s %s %s\n", []interface{}{
+		return "%s %*d %-*s %-*s %-*s %*s %s ", []interface{}{
 			d.mode,
 			widths.link, d.nlink,
 			widths.owner, d.owner,
@@ -213,27 +405,24 @@ func longListFormatArgs(d fileDetails, widths longListWidths, config *lsconfig.C
 			widths.group, d.group,
 			widths.size, d.sizeStr,
 			timeStr,
-			d.name,
 		}
 	case config.NoGroup:
-		return "%s %*d %-*s %*s %s %s\n", []interface{}{
+		return "%s %*d %-*s %*s %s ", []interface{}{
 			d.mode,
 			widths.link, d.nlink,
 			widths.owner, d.owner,
 			widths.size, d.sizeStr,
 			timeStr,
-			d.name,
 		}
 	default:
 		// Print without author column.
-		return "%s %*d %-*s %-*s %*s %s %s\n", []interface{}{
+		return "%s %*d %-*s %-*s %*s %s ", []interface{}{
 			d.mode,
 			widths.link, d.nlink,
 			widths.owner, d.owner,
 			widths.group, d.group,
 			widths.size, d.sizeStr,
 			timeStr,
-			d.name,
 		}
 	}
 }
@@ -364,4 +553,16 @@ var IsTerminalFunc = func(fd int) bool {
 
 var GetTermSizeFunc = func(fd int) (width, height int, err error) {
 	return term.GetSize(fd)
+}
+
+// ByteCountingWriter counts bytes written to the underlying writer
+type ByteCountingWriter struct {
+	io.Writer
+	Count int64
+}
+
+func (w *ByteCountingWriter) Write(p []byte) (int, error) {
+	n, err := w.Writer.Write(p)
+	w.Count += int64(n)
+	return n, err
 }

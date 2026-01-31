@@ -369,6 +369,19 @@ func TestParseArgs(t *testing.T) {
 			},
 		},
 		{
+			name:        "-D flag only (implies -l)",
+			args:        []string{"-D"},
+			expectError: false,
+			checkConfig: func(t *testing.T, config *config.Config) {
+				if !config.Dired {
+					t.Error("Expected Dired to be true")
+				}
+				if !config.LongListing {
+					t.Error("Expected LongListing to be true because of -D")
+				}
+			},
+		},
+		{
 			name:        "unknown flag",
 			args:        []string{"-x"},
 			expectError: true,
@@ -556,4 +569,141 @@ func TestParseArgsErrorCases(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestParseArgsQuotingStyle(t *testing.T) {
+	t.Run("explicit flag", func(t *testing.T) {
+		cfg, err := ParseArgs([]string{"--quoting-style=shell"}, io.Discard)
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+		if cfg.QuotingStyle != config.QuotingStyleShell {
+			t.Errorf("Expected QuotingStyleShell, got %v", cfg.QuotingStyle)
+		}
+	})
+
+	t.Run("-b flag (escape)", func(t *testing.T) {
+		cfg, err := ParseArgs([]string{"-b"}, io.Discard)
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+		if cfg.QuotingStyle != config.QuotingStyleEscape {
+			t.Errorf("Expected QuotingStyleEscape, got %v", cfg.QuotingStyle)
+		}
+	})
+
+	t.Run("flag overrides -b", func(t *testing.T) {
+		cfg, err := ParseArgs([]string{"-b", "--quoting-style=literal"}, io.Discard)
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+		if cfg.QuotingStyle != config.QuotingStyleLiteral {
+			t.Errorf("Expected QuotingStyleLiteral, got %v", cfg.QuotingStyle)
+		}
+	})
+
+	t.Run("default (literal)", func(t *testing.T) {
+		cfg, err := ParseArgs([]string{}, io.Discard)
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+		if cfg.QuotingStyle != config.QuotingStyleLiteral {
+			t.Errorf("Expected QuotingStyleLiteral, got %v", cfg.QuotingStyle)
+		}
+	})
+
+	t.Run("dired default", func(t *testing.T) {
+		cfg, err := ParseArgs([]string{"-D"}, io.Discard)
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+		if cfg.QuotingStyle != config.QuotingStyleShellEscape {
+			t.Errorf("Expected QuotingStyleShellEscape for Dired, got %v", cfg.QuotingStyle)
+		}
+	})
+
+	t.Run("env shell-always with no flags", func(t *testing.T) {
+		t.Setenv("QUOTING_STYLE", "shell-always")
+		cfg, err := ParseArgs([]string{}, io.Discard)
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+		if cfg.QuotingStyle != config.QuotingStyleShellAlways {
+			t.Errorf("Expected QuotingStyleShellAlways, got %v", cfg.QuotingStyle)
+		}
+	})
+
+	t.Run("env overrides dired default", func(t *testing.T) {
+		t.Setenv("QUOTING_STYLE", "literal")
+		cfg, err := ParseArgs([]string{"-D"}, io.Discard)
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+		if cfg.QuotingStyle != config.QuotingStyleLiteral {
+			t.Errorf("Expected QUOTING_STYLE to override dired default, got %v", cfg.QuotingStyle)
+		}
+	})
+
+	t.Run("-b overrides env", func(t *testing.T) {
+		t.Setenv("QUOTING_STYLE", "literal")
+		cfg, err := ParseArgs([]string{"-b"}, io.Discard)
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+		if cfg.QuotingStyle != config.QuotingStyleEscape {
+			t.Errorf("Expected -b to override QUOTING_STYLE, got %v", cfg.QuotingStyle)
+		}
+	})
+
+	t.Run("valid env with no flag", func(t *testing.T) {
+		t.Setenv("QUOTING_STYLE", "shell")
+		cfg, err := ParseArgs([]string{}, io.Discard)
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+		if cfg.QuotingStyle != config.QuotingStyleShell {
+			t.Errorf("Expected QUOTING_STYLE=shell, got %v", cfg.QuotingStyle)
+		}
+	})
+
+	t.Run("invalid env falls back to literal", func(t *testing.T) {
+		t.Setenv("QUOTING_STYLE", "nope")
+		var stderr bytes.Buffer
+		cfg, err := ParseArgs([]string{}, &stderr)
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+		if cfg.QuotingStyle != config.QuotingStyleLiteral {
+			t.Errorf("Expected literal fallback, got %v", cfg.QuotingStyle)
+		}
+		if !strings.Contains(stderr.String(), "ignoring invalid value of environment variable QUOTING_STYLE") {
+			t.Errorf("Expected QUOTING_STYLE warning, got %q", stderr.String())
+		}
+	})
+
+	t.Run("invalid env falls back to dired default", func(t *testing.T) {
+		t.Setenv("QUOTING_STYLE", "nope")
+		var stderr bytes.Buffer
+		cfg, err := ParseArgs([]string{"-D"}, &stderr)
+		if err != nil {
+			t.Fatalf("Unexpected error: %v", err)
+		}
+		if cfg.QuotingStyle != config.QuotingStyleShellEscape {
+			t.Errorf("Expected dired fallback, got %v", cfg.QuotingStyle)
+		}
+		if !strings.Contains(stderr.String(), "ignoring invalid value of environment variable QUOTING_STYLE") {
+			t.Errorf("Expected QUOTING_STYLE warning, got %q", stderr.String())
+		}
+	})
+
+	t.Run("invalid --quoting-style returns error", func(t *testing.T) {
+		var stderr bytes.Buffer
+		cfg, err := ParseArgs([]string{"--quoting-style=nope"}, &stderr)
+		if err == nil {
+			t.Fatal("Expected error for invalid --quoting-style, got nil")
+		}
+		if cfg != nil {
+			t.Errorf("Expected nil config on error, got %v", cfg)
+		}
+	})
 }

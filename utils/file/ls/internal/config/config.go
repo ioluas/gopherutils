@@ -21,8 +21,10 @@ type Config struct {
 	Columnate     bool // -C: list entries by columns
 	OnePerLine    bool // -1: list one file per line
 	ListDirectory bool // -d, --directory: list directories themselves, not their contents
+	Dired         bool // -D, --dired: generate output designed for Emacs' dired mode
 	BlockSize     *BlockSizeSpec
-	FormatMode    FormatMode // Tracks which format flag was specified last (-C, -1, or default)
+	FormatMode    FormatMode   // Tracks which format flag was specified last (-C, -1, or default)
+	QuotingStyle  QuotingStyle // --quoting-style=WORD
 }
 
 // FormatMode represents the output format mode
@@ -33,6 +35,42 @@ const (
 	FormatColumnate                    // -C was last
 	FormatOnePerLine                   // -1 was last
 )
+
+type QuotingStyle int
+
+const (
+	QuotingStyleLiteral QuotingStyle = iota
+	QuotingStyleLocale
+	QuotingStyleShell
+	QuotingStyleShellAlways
+	QuotingStyleShellEscape
+	QuotingStyleShellEscapeAlways
+	QuotingStyleC
+	QuotingStyleEscape
+)
+
+func (q QuotingStyle) String() string {
+	switch q {
+	case QuotingStyleLiteral:
+		return "literal"
+	case QuotingStyleLocale:
+		return "locale"
+	case QuotingStyleShell:
+		return "shell"
+	case QuotingStyleShellAlways:
+		return "shell-always"
+	case QuotingStyleShellEscape:
+		return "shell-escape"
+	case QuotingStyleShellEscapeAlways:
+		return "shell-escape-always"
+	case QuotingStyleC:
+		return "c"
+	case QuotingStyleEscape:
+		return "escape"
+	default:
+		return "literal"
+	}
+}
 
 type BlockSizeMode int
 

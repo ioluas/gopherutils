@@ -22,9 +22,16 @@ func main() {
 	os.Exit(Execute(os.Args[1:], os.Stdout, os.Stderr))
 }
 
+func effectiveQuotingStyle(cfg *config.Config) config.QuotingStyle {
+	if cfg.QuotingStyle == config.QuotingStyleLiteral && cfg.Escape {
+		return config.QuotingStyleEscape
+	}
+	return cfg.QuotingStyle
+}
+
 // Execute is the entry point for the ls utility, extracted from main for testing.
 func Execute(args []string, stdout, stderr io.Writer) int {
-	config, err := parse.ParseArgs(args, stderr)
+	cfg, err := parse.ParseArgs(args, stderr)
 	if err != nil {
 		if errors.Is(err, pflag.ErrHelp) {
 			return 0
@@ -34,16 +41,16 @@ func Execute(args []string, stdout, stderr io.Writer) int {
 	}
 
 	exitCode := 0
-	for i, dir := range config.Directories {
+	for i, dir := range cfg.Directories {
 		// Print directory name if multiple directories are listed
-		if len(config.Directories) > 1 {
+		if len(cfg.Directories) > 1 {
 			if i > 0 {
 				_, _ = fmt.Fprintln(stdout) // Blank line between directory listings
 			}
 			_, _ = fmt.Fprintf(stdout, "%s:\n", dir)
 		}
 
-		currentExitCode := run(dir, config, stdout, stderr)
+		currentExitCode := run(dir, cfg, stdout, stderr)
 		if currentExitCode != 0 {
 			exitCode = currentExitCode
 		}
@@ -52,9 +59,9 @@ func Execute(args []string, stdout, stderr io.Writer) int {
 }
 
 // run executes the ls logic for a given configuration
-func run(path string, config *config.Config, stdout, stderr io.Writer) int {
-	timeutil.NormalizeTimeConfig(config, stderr)
-	if config.ListDirectory {
+func run(path string, cfg *config.Config, stdout, stderr io.Writer) int {
+	timeutil.NormalizeTimeConfig(cfg, stderr)
+	if cfg.ListDirectory {
 		// List the directory itself, not its contents
 		// Check if the path exists first
 		info, err := os.Lstat(path)
@@ -66,16 +73,14 @@ func run(path string, config *config.Config, stdout, stderr io.Writer) int {
 		entry := entry.NewCachedDirEntry(entry.NewDirEntryWrapper(path, path, true, info, nil), info)
 		entries := []os.DirEntry{entry}
 
-		if config.LongListing {
-			if display.PrintLongList(stdout, stderr, entries, config) {
+		if cfg.LongListing {
+			if display.PrintLongList(stdout, stderr, entries, cfg, false) {
 				return 2
 			}
 		} else {
 			name := entry.Name()
-			if config.Escape {
-				name = display.QuoteName(name)
-			}
-			display.PrintEntries(stdout, []string{name}, config)
+			name = display.Quote(name, effectiveQuotingStyle(cfg))
+			display.PrintEntries(stdout, []string{name}, cfg)
 		}
 		return 0
 	}
@@ -89,7 +94,7 @@ func run(path string, config *config.Config, stdout, stderr io.Writer) int {
 	var filtered []os.DirEntry
 
 	// If ShowAll is true, explicitly add "." and ".."
-	if config.ShowAll {
+	if cfg.ShowAll {
 		filtered = append(filtered, &entry.CachedDirEntry{DirEntry: entry.NewDirEntryWrapper(".", path, false, nil, nil)})
 		filtered = append(filtered, &entry.CachedDirEntry{DirEntry: entry.NewDirEntryWrapper("..", path, false, nil, nil)})
 	}
@@ -101,9 +106,9 @@ func run(path string, config *config.Config, stdout, stderr io.Writer) int {
 
 		// If it's a dotfile (excluding . and .. now that we handle them separately)
 		if strings.HasPrefix(name, ".") {
-			if config.ShowAll {
+			if cfg.ShowAll {
 				shouldInclude = true
-			} else if config.ShowAlmostAll {
+			} else if cfg.ShowAlmostAll {
 				// -A is active, include dotfiles but not '.' or '..'
 				// We only reach here for dotfiles other than '.' or '..', so include them.
 				shouldInclude = true
@@ -113,7 +118,7 @@ func run(path string, config *config.Config, stdout, stderr io.Writer) int {
 			}
 		}
 		// If it's not a dotfile, shouldInclude remains true
-		if shouldInclude && config.IgnoreBackups && strings.HasSuffix(name, "~") {
+		if shouldInclude && cfg.IgnoreBackups && strings.HasSuffix(name, "~") {
 			shouldInclude = false
 		}
 
@@ -123,7 +128,7 @@ func run(path string, config *config.Config, stdout, stderr io.Writer) int {
 	}
 
 	hadError := false
-	if config.SortTime {
+	if cfg.SortTime {
 		for i, e := range filtered {
 			ce, ok := e.(*entry.CachedDirEntry)
 			if !ok {
@@ -133,12 +138,12 @@ func run(path string, config *config.Config, stdout, stderr io.Writer) int {
 			info, err := ce.Info()
 			if err != nil {
 				hadError = true
-				if !config.LongListing {
+				if !cfg.LongListing {
 					_, _ = fmt.Fprintf(stderr, "ls: cannot access '%s': %v\n", ce.Name(), err)
 				}
 				continue
 			}
-			t := timeutil.GetEntryTime(info, config.TimeField)
+			t := timeutil.GetEntryTime(info, cfg.TimeField)
 			ce.Time = &t
 		}
 
@@ -160,12 +165,12 @@ func run(path string, config *config.Config, stdout, stderr io.Writer) int {
 	}
 
 	// Warn if -h is used without -l
-	if (config.HumanReadable || config.SI) && !config.LongListing {
-		if config.HumanReadable && config.SI {
+	if (cfg.HumanReadable || cfg.SI) && !cfg.LongListing {
+		if cfg.HumanReadable && cfg.SI {
 			_, _ = fmt.Fprintf(stderr, "ls: warning: options -h and --si are ignored when -l is not used\n")
 		} else {
 			flag := "-h"
-			if config.SI {
+			if cfg.SI {
 				flag = "--si"
 			}
 			_, _ = fmt.Fprintf(stderr, "ls: warning: option %s is ignored when -l is not used\n", flag)
@@ -173,34 +178,33 @@ func run(path string, config *config.Config, stdout, stderr io.Writer) int {
 	}
 
 	// Warn if --block-size is used without -l
-	if config.BlockSize != nil && !config.LongListing {
+	if cfg.BlockSize != nil && !cfg.LongListing {
 		_, _ = fmt.Fprintf(stderr, "ls: warning: option --block-size is ignored when -l is not used\n")
 	}
 
 	// Warn if --no-group is used without -l
-	if config.NoGroup && !config.LongListing {
+	if cfg.NoGroup && !cfg.LongListing {
 		_, _ = fmt.Fprintf(stderr, "ls: warning: --no-group is ignored when -l is not used\n")
 	}
 
 	// Warn if --author is used without -l
-	if config.ShowAuthor && !config.LongListing {
+	if cfg.ShowAuthor && !cfg.LongListing {
 		_, _ = fmt.Fprintf(stderr, "ls: warning: --author is ignored when -l is not used\n")
 	}
 
-	if config.LongListing {
-		if display.PrintLongList(stdout, stderr, filtered, config) {
+	if cfg.LongListing {
+		printTotal := true
+		if display.PrintLongList(stdout, stderr, filtered, cfg, printTotal) {
 			hadError = true
 		}
 	} else {
 		names := make([]string, len(filtered))
 		for i, e := range filtered {
 			name := e.Name()
-			if config.Escape {
-				name = display.QuoteName(name)
-			}
+			name = display.Quote(name, effectiveQuotingStyle(cfg))
 			names[i] = name
 		}
-		display.PrintEntries(stdout, names, config)
+		display.PrintEntries(stdout, names, cfg)
 	}
 
 	if hadError {
