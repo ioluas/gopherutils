@@ -98,7 +98,7 @@ func quoteLocale(name string) string {
 // It wraps the name in single quotes if it contains characters that require quoting.
 // Single quotes inside the string are escaped as '\”.
 func ShellQuote(name string) string {
-	return quoteShellANSI(name, false)
+	return quoteShell(name, false)
 }
 
 func quoteShellANSI(name string, always bool) string {
@@ -138,6 +138,43 @@ func quoteShellANSI(name string, always bool) string {
 	return b.String()
 }
 
+func quoteShell(name string, always bool) string {
+	needsQuote := false
+	if !always {
+		for _, r := range name {
+			// Characters that usually require quoting in shell
+			if r == ' ' || r == '\t' || r == '\n' || r == '\'' || r == '"' ||
+				r == '\\' || r == '$' || r == '`' || r == '(' || r == ')' ||
+				r == '<' || r == '>' || r == '|' || r == '&' || r == ';' || r == '*' ||
+				r == '?' || r == '[' || r == ']' || r == '#' || r == '~' {
+				needsQuote = true
+				break
+			}
+			// Also quote control characters (though usually ls -b changes them)
+			if r < 32 || r == 127 {
+				needsQuote = true
+				break
+			}
+		}
+	}
+
+	if !always && !needsQuote && len(name) > 0 {
+		return name
+	}
+
+	var b strings.Builder
+	b.WriteByte('\'')
+	for _, r := range name {
+		if r == '\'' {
+			b.WriteString(`'\''`)
+		} else {
+			b.WriteRune(r)
+		}
+	}
+	b.WriteByte('\'')
+	return b.String()
+}
+
 // Quote quotes the name according to the configured style.
 func Quote(name string, style lsconfig.QuotingStyle) string {
 	switch style {
@@ -145,9 +182,13 @@ func Quote(name string, style lsconfig.QuotingStyle) string {
 		return QuoteName(name)
 	case lsconfig.QuotingStyleLocale:
 		return quoteLocale(name)
-	case lsconfig.QuotingStyleShell, lsconfig.QuotingStyleShellEscape:
+	case lsconfig.QuotingStyleShell:
+		return quoteShell(name, false)
+	case lsconfig.QuotingStyleShellAlways:
+		return quoteShell(name, true)
+	case lsconfig.QuotingStyleShellEscape:
 		return quoteShellANSI(name, false)
-	case lsconfig.QuotingStyleShellAlways, lsconfig.QuotingStyleShellEscapeAlways:
+	case lsconfig.QuotingStyleShellEscapeAlways:
 		return quoteShellANSI(name, true)
 	case lsconfig.QuotingStyleC:
 		escaped := strings.ReplaceAll(QuoteName(name), `"`, `\"`)

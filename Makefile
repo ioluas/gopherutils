@@ -77,7 +77,7 @@ list:
 .PHONY: test
 test:
 	@echo "Running tests..."
-	@$(GO) test -race -cover ./...
+	@$(GO) test -race ./...
 
 # Run tests and generate coverage report
 .PHONY: coverage
@@ -146,3 +146,10 @@ help:
 	@echo "  staticcheck  - Run staticcheck"
 	@echo "  CQ           - Run lint, vet, staticcheck, fmt, and coverage"
 	@echo "  help         - Show this help message"
+
+
+
+.PHONY: gui
+gui:
+	@echo "Launching Makefile GUI..."
+	@./scripts/makefile_gui.tcl
