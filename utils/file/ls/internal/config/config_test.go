@@ -2,6 +2,29 @@ package config
 
 import "testing"
 
+func TestQuotingStyleString(t *testing.T) {
+	tests := []struct {
+		style    QuotingStyle
+		expected string
+	}{
+		{QuotingStyleLiteral, "literal"},
+		{QuotingStyleLocale, "locale"},
+		{QuotingStyleShell, "shell"},
+		{QuotingStyleShellAlways, "shell-always"},
+		{QuotingStyleShellEscape, "shell-escape"},
+		{QuotingStyleShellEscapeAlways, "shell-escape-always"},
+		{QuotingStyleC, "c"},
+		{QuotingStyleEscape, "escape"},
+		{QuotingStyle(99), "literal"},
+	}
+
+	for _, tt := range tests {
+		if got := tt.style.String(); got != tt.expected {
+			t.Fatalf("QuotingStyle(%d).String() = %q, want %q", tt.style, got, tt.expected)
+		}
+	}
+}
+
 func TestBlockSizeModeDefaults(t *testing.T) {
 	if BlockSizeModeBytes != 0 {
 		t.Fatalf("expected BlockSizeModeBytes to be zero, got %d", BlockSizeModeBytes)
@@ -32,5 +55,14 @@ func TestTimeStyleKindDefaults(t *testing.T) {
 	}
 	if TimeStyleFullISO == TimeStyleLongISO || TimeStyleFullISO == TimeStyleISO || TimeStyleFullISO == TimeStyleCustom {
 		t.Fatal("expected time style kinds to be distinct")
+	}
+}
+
+func TestFormatModeDefaults(t *testing.T) {
+	if FormatDefault != 0 {
+		t.Fatalf("expected FormatDefault to be zero, got %d", FormatDefault)
+	}
+	if FormatDefault == FormatColumnate || FormatDefault == FormatOnePerLine || FormatColumnate == FormatOnePerLine {
+		t.Fatal("expected format modes to be distinct")
 	}
 }
