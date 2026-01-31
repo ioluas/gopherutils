@@ -74,7 +74,7 @@ func run(path string, config *config.Config, stdout, stderr io.Writer) int {
 			if config.Escape {
 				name = display.QuoteName(name)
 			}
-			display.PrintEntries(stdout, []string{name})
+			display.PrintEntries(stdout, []string{name}, config)
 		}
 		return 0
 	}
@@ -147,7 +147,14 @@ func run(path string, config *config.Config, stdout, stderr io.Writer) int {
 	} else {
 		// Sort filtered entries by name for consistent output
 		sort.Slice(filtered, func(i, j int) bool {
-			return filtered[i].Name() < filtered[j].Name()
+			n1 := filtered[i].Name()
+			n2 := filtered[j].Name()
+			norm1 := normalizeName(n1)
+			norm2 := normalizeName(n2)
+			if norm1 != norm2 {
+				return norm1 < norm2
+			}
+			return n1 < n2
 		})
 	}
 
@@ -192,11 +199,24 @@ func run(path string, config *config.Config, stdout, stderr io.Writer) int {
 			}
 			names[i] = name
 		}
-		display.PrintEntries(stdout, names)
+		display.PrintEntries(stdout, names, config)
 	}
 
 	if hadError {
 		return 2
 	}
 	return 0
+}
+
+// normalizeName prepares a filename for sorting by removing non-alphanumeric characters
+// and converting to lowercase, mimicking basic locale-aware sorting (ignoring punctuation).
+func normalizeName(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+		}
+	}
+	return strings.ToLower(b.String())
 }

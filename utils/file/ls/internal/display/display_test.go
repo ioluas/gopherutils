@@ -168,48 +168,60 @@ func (m *mockFile) Fd() uintptr {
 }
 
 // Helper function to generate expected grid output, simulating PrintGrid's logic
-func generateExpectedGridOutput(names []string, width int) string {
+func generateExpectedGridOutput(names []string, termWidth int) string {
 	if len(names) == 0 {
 		return ""
 	}
 
-	maxLen := 0
-	for _, name := range names {
-		if len(name) > maxLen {
-			maxLen = len(name)
-		}
-	}
-	colWidth := maxLen + 2
+	n := len(names)
+	padding := 2
 
-	if colWidth > width {
-		colWidth = width
-	}
-	if colWidth == 0 {
-		colWidth = 1
-	}
+	// Try with increasing number of rows
+	for rows := 1; rows <= n; rows++ {
+		cols := (n + rows - 1) / rows
 
-	numCols := width / colWidth
-	if numCols == 0 {
-		numCols = 1
-	}
-	if numCols > len(names) {
-		numCols = len(names)
-	}
-
-	numRows := (len(names) + numCols - 1) / numCols
-
-	var buf bytes.Buffer
-	for r := 0; r < numRows; r++ {
-		for c := 0; c < numCols; c++ {
-			idx := c*numRows + r
-			if idx < len(names) {
-				format := fmt.Sprintf("%%-%ds", colWidth)
-				fmt.Fprintf(&buf, format, names[idx])
+		// Calculate width of each column
+		colWidths := make([]int, cols)
+		for c := 0; c < cols; c++ {
+			for r := 0; r < rows; r++ {
+				idx := c*rows + r
+				if idx < n {
+					l := len(names[idx])
+					if l > colWidths[c] {
+						colWidths[c] = l
+					}
+				}
 			}
 		}
-		fmt.Fprintln(&buf)
+
+		// Calculate total width required
+		totalWidth := 0
+		for _, w := range colWidths {
+			totalWidth += w
+		}
+		totalWidth += (cols - 1) * padding
+
+		// If it fits, or if we are forced to 1 column (rows==n), print it
+		if totalWidth <= termWidth || rows == n {
+			var buf bytes.Buffer
+			for r := 0; r < rows; r++ {
+				for c := 0; c < cols; c++ {
+					idx := c*rows + r
+					if idx < n {
+						if c < cols-1 {
+							format := fmt.Sprintf("%%-%ds", colWidths[c]+padding)
+							fmt.Fprintf(&buf, format, names[idx])
+						} else {
+							fmt.Fprint(&buf, names[idx])
+						}
+					}
+				}
+				fmt.Fprintln(&buf)
+			}
+			return buf.String()
+		}
 	}
-	return buf.String()
+	return ""
 }
 
 func TestPrintEntries(t *testing.T) {
@@ -224,6 +236,7 @@ func TestPrintEntries(t *testing.T) {
 	tests := []struct {
 		name           string
 		names          []string
+		cfg            *config.Config
 		isTerminal     bool
 		termWidth      int
 		expected       string
@@ -232,41 +245,72 @@ func TestPrintEntries(t *testing.T) {
 		{
 			name:       "empty list",
 			names:      []string{},
+			cfg:        &config.Config{},
 			isTerminal: true,
 			termWidth:  80,
 			expected:   "",
 		},
 		{
-			name:       "not a terminal",
+			name:       "not a terminal, no columnate",
 			names:      []string{"file1", "file2", "file3"},
+			cfg:        &config.Config{Columnate: false},
 			isTerminal: false,
 			termWidth:  80,
 			expected:   "file1\nfile2\nfile3\n",
 		},
 		{
-			name:       "terminal, single column (narrow width)",
+			name:       "terminal, no explicit columnate (defaults to grid)",
+			names:      []string{"file1", "file2", "file3"},
+			cfg:        &config.Config{Columnate: false},
+			isTerminal: true,
+			termWidth:  80,
+			expected:   generateExpectedGridOutput([]string{"file1", "file2", "file3"}, 80),
+		},
+		{
+			name:       "terminal, force one per line",
+			names:      []string{"file1", "file2", "file3"},
+			cfg:        &config.Config{OnePerLine: true},
+			isTerminal: true,
+			termWidth:  80,
+			expected:   "file1\nfile2\nfile3\n",
+		},
+		{
+			name:       "terminal, columnate, single column (narrow width)",
 			names:      []string{"longfilename", "short"},
+			cfg:        &config.Config{Columnate: true},
 			isTerminal: true,
 			termWidth:  10,
 			expected:   generateExpectedGridOutput([]string{"longfilename", "short"}, 10),
 		},
 		{
-			name:       "terminal, multiple columns",
+			name:       "terminal, columnate, multiple columns",
 			names:      []string{"a", "b", "c", "d", "e"},
+			cfg:        &config.Config{Columnate: true},
 			isTerminal: true,
 			termWidth:  20,
 			expected:   generateExpectedGridOutput([]string{"a", "b", "c", "d", "e"}, 20),
 		},
 		{
-			name:       "terminal, multiple columns, longer names",
+			name:       "terminal, columnate, multiple columns, longer names",
 			names:      []string{"apple", "banana", "cherry", "date", "elderberry"},
+			cfg:        &config.Config{Columnate: true},
 			isTerminal: true,
 			termWidth:  30,
 			expected:   generateExpectedGridOutput([]string{"apple", "banana", "cherry", "date", "elderberry"}, 30),
 		},
 		{
-			name:           "GetTermSize error, fallback to non-terminal",
+			name:           "GetTermSize error, columnate true, default to 80 chars",
 			names:          []string{"file1", "file2"},
+			cfg:            &config.Config{Columnate: true},
+			isTerminal:     true,
+			termWidth:      80, // Terminal width doesn't matter if error occurs
+			getTermSizeErr: true,
+			expected:       generateExpectedGridOutput([]string{"file1", "file2"}, 80),
+		},
+		{
+			name:           "GetTermSize error, columnate false, consistent non-terminal style",
+			names:          []string{"file1", "file2"},
+			cfg:            &config.Config{Columnate: false},
 			isTerminal:     true,
 			termWidth:      80, // Terminal width doesn't matter if error occurs
 			getTermSizeErr: true,
@@ -290,7 +334,7 @@ func TestPrintEntries(t *testing.T) {
 			GetTermSizeFunc = mockGetTermSizeFunc
 
 			var buf mockFile
-			PrintEntries(&buf, tt.names)
+			PrintEntries(&buf, tt.names, tt.cfg)
 
 			if actual := buf.String(); actual != tt.expected {
 				t.Errorf("PrintEntries() got:\n%q\nwant:\n%q", actual, tt.expected)

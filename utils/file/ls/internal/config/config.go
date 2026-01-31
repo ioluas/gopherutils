@@ -18,6 +18,8 @@ type Config struct {
 	NoGroup       bool // -G, --no-group: in a long listing, don't print group names
 	Escape        bool // -b, --escape: print C-style escapes for nongraphic characters
 	IgnoreBackups bool // -B, --ignore-backups: do not list implied entries ending with ~
+	Columnate     bool // -C: list entries by columns
+	OnePerLine    bool // -1: list one file per line
 	ListDirectory bool // -d, --directory: list directories themselves, not their contents
 	BlockSize     *BlockSizeSpec
 }

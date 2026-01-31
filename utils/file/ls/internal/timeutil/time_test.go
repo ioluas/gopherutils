@@ -285,3 +285,48 @@ func TestParseTimeFormatSimple(t *testing.T) {
 		t.Fatalf("expected simple format to parse, ok=%v warn=%q recent=%q old=%q", ok, warn, recent, old)
 	}
 }
+
+func TestFormatTimeNilConfig(t *testing.T) {
+	now := time.Now()
+	cfg := &config.Config{TimeStyleSpec: nil}
+	result := FormatTime(now, cfg)
+	if result == "" {
+		t.Fatal("expected non-empty result with nil TimeStyleSpec")
+	}
+}
+
+func TestNormalizeTimeConfigFullTimeWithoutLongListing(t *testing.T) {
+	cfg := &config.Config{
+		FullTime: true,
+		TimeStyleSpec: &config.TimeStyleSpec{
+			Kind:         config.TimeStyleFullISO,
+			RecentLayout: "2006-01-02 15:04:05.000000000 -0700",
+		},
+	}
+
+	var stderr bytes.Buffer
+	NormalizeTimeConfig(cfg, &stderr)
+	if !strings.Contains(stderr.String(), "ls: warning: --full-time is ignored when -l is not used") {
+		t.Fatalf("expected warning, got %q", stderr.String())
+	}
+	if cfg.TimeStyleSpec != nil {
+		t.Fatal("expected TimeStyleSpec to be cleared")
+	}
+}
+
+func TestNormalizeTimeConfigTimeFieldWithSortTime(t *testing.T) {
+	cfg := &config.Config{
+		SortTime:     true,
+		TimeFieldSet: true,
+		TimeField:    config.TimeFieldAccess,
+	}
+
+	var stderr bytes.Buffer
+	NormalizeTimeConfig(cfg, &stderr)
+	if stderr.Len() != 0 {
+		t.Fatalf("expected no warning when SortTime is set, got %q", stderr.String())
+	}
+	if cfg.TimeField != config.TimeFieldAccess {
+		t.Fatal("expected TimeField to remain unchanged")
+	}
+}
