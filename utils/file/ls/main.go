@@ -190,7 +190,7 @@ func run(path string, cfg *config.Config, stdout, stderr io.Writer) int {
 	}
 
 	if cfg.LongListing {
-		printTotal := cfg.Dired
+		printTotal := !cfg.Dired
 		if display.PrintLongList(stdout, stderr, filtered, cfg, printTotal) {
 			hadError = true
 		}

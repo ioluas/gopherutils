@@ -385,7 +385,7 @@ func TestRun(t *testing.T) {
 			expectedExit: 0,
 			expectedStdout: func() string {
 				username, groupname := getUserDetails(t)
-				return getFileDetails(t, "file1.txt", username, groupname, false)
+				return "total 0\n" + getFileDetails(t, "file1.txt", username, groupname, false)
 			}(),
 			expectedStderr: "",
 		},
@@ -405,7 +405,7 @@ func TestRun(t *testing.T) {
 			expectedExit: 0,
 			expectedStdout: func() string {
 				username, groupname := getUserDetails(t)
-				return getFileDetails(t, "file1.txt", username, groupname, true)
+				return "total 0\n" + getFileDetails(t, "file1.txt", username, groupname, true)
 			}(),
 			expectedStderr: "",
 		},
@@ -765,8 +765,16 @@ func TestPrintLongListWithoutAuthor(t *testing.T) {
 	}
 	// Verify it's in the expected format (no owner/group columns)
 	lines := strings.Split(strings.TrimSpace(output), "\n")
-	if len(lines) > 0 {
-		fields := strings.Fields(lines[0])
+	var dataLine string
+	for _, line := range lines {
+		if strings.HasPrefix(line, "total ") {
+			continue
+		}
+		dataLine = line
+		break
+	}
+	if dataLine != "" {
+		fields := strings.Fields(dataLine)
 		// Should have: mode, nlink, owner, group, size, date, time, name (8 fields)
 		if len(fields) < 8 {
 			t.Errorf("Expected at least 8 fields in long listing, got %d: %v", len(fields), fields)
@@ -968,10 +976,18 @@ func TestPrintLongListWithNoGroup(t *testing.T) {
 	}
 
 	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
-	if len(lines) == 0 {
+	var dataLine string
+	for _, line := range lines {
+		if strings.HasPrefix(line, "total ") {
+			continue
+		}
+		dataLine = line
+		break
+	}
+	if dataLine == "" {
 		t.Fatalf("Expected output, got empty")
 	}
-	fields := strings.Fields(lines[0])
+	fields := strings.Fields(dataLine)
 	if len(fields) != 9 {
 		t.Fatalf("Expected 9 fields (mode nlink owner author size month day time name), got %d: %v", len(fields), fields)
 	}
@@ -996,10 +1012,18 @@ func TestPrintLongListWithBlockSize(t *testing.T) {
 	}
 
 	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
-	if len(lines) == 0 {
+	var dataLine string
+	for _, line := range lines {
+		if strings.HasPrefix(line, "total ") {
+			continue
+		}
+		dataLine = line
+		break
+	}
+	if dataLine == "" {
 		t.Fatalf("Expected output, got empty")
 	}
-	fields := strings.Fields(lines[0])
+	fields := strings.Fields(dataLine)
 	if len(fields) < 8 {
 		t.Fatalf("Expected long listing fields, got %v", fields)
 	}
