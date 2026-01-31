@@ -244,9 +244,9 @@ func TestPrintLongListWithCachedDirEntryError(t *testing.T) {
 		},
 	}
 
-	config := &config.Config{}
+	lsConfig := &config.Config{}
 	var stdout, stderr bytes.Buffer
-	hadError := PrintLongList(&stdout, &stderr, entries, config)
+	hadError := PrintLongList(&stdout, &stderr, entries, lsConfig)
 
 	if !hadError {
 		t.Error("expected error to be reported")
