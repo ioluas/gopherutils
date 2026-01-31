@@ -7,6 +7,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unicode"
 
 	"github.com/ioluas/gopherutils/internal/fsutil"
 	lsconfig "github.com/ioluas/gopherutils/utils/file/ls/internal/config"
@@ -48,14 +49,59 @@ func QuoteName(name string) string {
 	return b.String()
 }
 
+func escapeRuneC(r rune) string {
+	switch r {
+	case '\a':
+		return `\a`
+	case '\b':
+		return `\b`
+	case '\f':
+		return `\f`
+	case '\n':
+		return `\n`
+	case '\r':
+		return `\r`
+	case '\t':
+		return `\t`
+	case '\v':
+		return `\v`
+	case '\\':
+		return `\\`
+	case '\'':
+		return `\'`
+	case '"':
+		return `\"`
+	default:
+		if r <= 0xFF {
+			return fmt.Sprintf("\\x%02X", r)
+		}
+		if r <= 0xFFFF {
+			return fmt.Sprintf("\\u%04X", r)
+		}
+		return fmt.Sprintf("\\U%08X", r)
+	}
+}
+
+func quoteLocale(name string) string {
+	var b strings.Builder
+	for _, r := range name {
+		if unicode.IsPrint(r) && r != '\u0000' {
+			b.WriteRune(r)
+			continue
+		}
+		b.WriteString(escapeRuneC(r))
+	}
+	return "\u2018" + b.String() + "\u2019"
+}
+
 // ShellQuote quotes a filename for shell usage.
 // It wraps the name in single quotes if it contains characters that require quoting.
 // Single quotes inside the string are escaped as '\”.
 func ShellQuote(name string) string {
-	return quoteShell(name, false)
+	return quoteShellANSI(name, false)
 }
 
-func quoteShell(name string, always bool) string {
+func quoteShellANSI(name string, always bool) string {
 	needsQuote := false
 	if !always {
 		for _, r := range name {
@@ -75,21 +121,18 @@ func quoteShell(name string, always bool) string {
 		}
 	}
 
-	if !always && !needsQuote {
-		if len(name) == 0 {
-			return "''"
-		}
+	if !always && !needsQuote && len(name) > 0 {
 		return name
 	}
 
 	var b strings.Builder
-	b.WriteByte('\'')
+	b.WriteString("$'")
 	for _, r := range name {
-		if r == '\'' {
-			b.WriteString(`'\''`)
-		} else {
+		if unicode.IsPrint(r) && r != '\u0000' && r != '\'' && r != '\\' {
 			b.WriteRune(r)
+			continue
 		}
+		b.WriteString(escapeRuneC(r))
 	}
 	b.WriteByte('\'')
 	return b.String()
@@ -101,13 +144,14 @@ func Quote(name string, style lsconfig.QuotingStyle) string {
 	case lsconfig.QuotingStyleEscape:
 		return QuoteName(name)
 	case lsconfig.QuotingStyleLocale:
-		return "\u2018" + QuoteName(name) + "\u2019"
+		return quoteLocale(name)
 	case lsconfig.QuotingStyleShell, lsconfig.QuotingStyleShellEscape:
-		return quoteShell(name, false)
+		return quoteShellANSI(name, false)
 	case lsconfig.QuotingStyleShellAlways, lsconfig.QuotingStyleShellEscapeAlways:
-		return quoteShell(name, true)
+		return quoteShellANSI(name, true)
 	case lsconfig.QuotingStyleC:
-		return `"` + QuoteName(name) + `"`
+		escaped := strings.ReplaceAll(QuoteName(name), `"`, `\"`)
+		return `"` + escaped + `"`
 	default:
 		return name
 	}

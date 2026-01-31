@@ -22,6 +22,13 @@ func main() {
 	os.Exit(Execute(os.Args[1:], os.Stdout, os.Stderr))
 }
 
+func effectiveQuotingStyle(cfg *config.Config) config.QuotingStyle {
+	if cfg.QuotingStyle == config.QuotingStyleLiteral && cfg.Escape {
+		return config.QuotingStyleEscape
+	}
+	return cfg.QuotingStyle
+}
+
 // Execute is the entry point for the ls utility, extracted from main for testing.
 func Execute(args []string, stdout, stderr io.Writer) int {
 	cfg, err := parse.ParseArgs(args, stderr)
@@ -72,11 +79,7 @@ func run(path string, cfg *config.Config, stdout, stderr io.Writer) int {
 			}
 		} else {
 			name := entry.Name()
-			style := cfg.QuotingStyle
-			if style == config.QuotingStyleLiteral && cfg.Escape {
-				style = config.QuotingStyleEscape
-			}
-			name = display.Quote(name, style)
+			name = display.Quote(name, effectiveQuotingStyle(cfg))
 			display.PrintEntries(stdout, []string{name}, cfg)
 		}
 		return 0
@@ -190,7 +193,7 @@ func run(path string, cfg *config.Config, stdout, stderr io.Writer) int {
 	}
 
 	if cfg.LongListing {
-		printTotal := !cfg.Dired
+		printTotal := true
 		if display.PrintLongList(stdout, stderr, filtered, cfg, printTotal) {
 			hadError = true
 		}
@@ -198,11 +201,7 @@ func run(path string, cfg *config.Config, stdout, stderr io.Writer) int {
 		names := make([]string, len(filtered))
 		for i, e := range filtered {
 			name := e.Name()
-			style := cfg.QuotingStyle
-			if style == config.QuotingStyleLiteral && cfg.Escape {
-				style = config.QuotingStyleEscape
-			}
-			name = display.Quote(name, style)
+			name = display.Quote(name, effectiveQuotingStyle(cfg))
 			names[i] = name
 		}
 		display.PrintEntries(stdout, names, cfg)

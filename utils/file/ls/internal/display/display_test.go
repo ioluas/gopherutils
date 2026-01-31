@@ -127,6 +127,18 @@ func TestQuoteQuotingStyles(t *testing.T) {
 			expected: "\u2018file\\nname\u2019",
 		},
 		{
+			name:     "locale preserves utf8",
+			input:    "cafe-雪",
+			style:    config.QuotingStyleLocale,
+			expected: "\u2018cafe-雪\u2019",
+		},
+		{
+			name:     "locale escapes control byte",
+			input:    "a\x01b",
+			style:    config.QuotingStyleLocale,
+			expected: "\u2018a\\x01b\u2019",
+		},
+		{
 			name:     "shell no quoting needed",
 			input:    "plain",
 			style:    config.QuotingStyleShell,
@@ -136,37 +148,49 @@ func TestQuoteQuotingStyles(t *testing.T) {
 			name:     "shell with space",
 			input:    "two words",
 			style:    config.QuotingStyleShell,
-			expected: "'two words'",
+			expected: "$'two words'",
 		},
 		{
 			name:     "shell always",
 			input:    "plain",
 			style:    config.QuotingStyleShellAlways,
-			expected: "'plain'",
+			expected: "$'plain'",
+		},
+		{
+			name:     "shell preserves utf8",
+			input:    "snow-雪",
+			style:    config.QuotingStyleShellAlways,
+			expected: "$'snow-雪'",
+		},
+		{
+			name:     "shell escapes control byte",
+			input:    "a\x01b",
+			style:    config.QuotingStyleShell,
+			expected: "$'a\\x01b'",
 		},
 		{
 			name:     "shell escape",
 			input:    "two words",
 			style:    config.QuotingStyleShellEscape,
-			expected: "'two words'",
+			expected: "$'two words'",
 		},
 		{
 			name:     "shell escape always",
 			input:    "plain",
 			style:    config.QuotingStyleShellEscapeAlways,
-			expected: "'plain'",
+			expected: "$'plain'",
 		},
 		{
 			name:     "shell empty",
 			input:    "",
 			style:    config.QuotingStyleShell,
-			expected: "''",
+			expected: "$''",
 		},
 		{
 			name:     "shell always empty",
 			input:    "",
 			style:    config.QuotingStyleShellAlways,
-			expected: "''",
+			expected: "$''",
 		},
 		{
 			name:     "c style",
@@ -545,12 +569,12 @@ func TestShellQuote(t *testing.T) {
 		expected string
 	}{
 		{"simple", "simple"},
-		{"file name", "'file name'"},
-		{"file\nname", "'file\nname'"},
-		{"file'name", "'file'\\''name'"}, // Single quote escaping
-		{"", "''"},
-		{"foo*", "'foo*'"},
-		{"param$name", "'param$name'"},
+		{"file name", "$'file name'"},
+		{"file\nname", "$'file\\nname'"},
+		{"file'name", "$'file\\'name'"},
+		{"", "$''"},
+		{"foo*", "$'foo*'"},
+		{"param$name", "$'param$name'"},
 	}
 	for _, tt := range tests {
 		got := ShellQuote(tt.input)
