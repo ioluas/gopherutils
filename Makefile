@@ -71,7 +71,9 @@ uninstall:
 .PHONY: list
 list:
 	@echo "Discovered utilities:"
-	@echo -e $(foreach dir,$(UTIL_DIRS),"  - $(notdir $(dir))\n")
+	@for dir in $(UTIL_DIRS); do \
+		echo "  - $$(basename $$dir)"; \
+	done
 
 # Run tests for all utilities
 .PHONY: test

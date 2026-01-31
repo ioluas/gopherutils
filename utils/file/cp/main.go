@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"syscall"
 
+	"github.com/ioluas/gopherutils/utils/file/cp/internal/backup"
 	"github.com/ioluas/gopherutils/utils/file/cp/internal/config"
 	"github.com/ioluas/gopherutils/utils/file/cp/internal/parse"
 	"github.com/spf13/pflag"
@@ -91,15 +92,47 @@ func copyFile(src, dst string, cfg *config.Config, stdout io.Writer) error {
 		dst = filepath.Join(dst, filepath.Base(src))
 	}
 
-	// Detect if source and final dst refer to the same file
-	if dstFi, err := os.Stat(dst); err == nil {
+	// Check for existing destination file and Update logic
+	dstFi, dstErr := os.Stat(dst)
+	if dstErr == nil {
+		// File exists
+		// Check for same file
 		if sameDevIno(sourceInfo, dstFi) {
 			return fmt.Errorf("'%s' and '%s' are the same file", src, dst)
 		}
+
+		// Update logic
+		switch cfg.UpdateMode {
+		case config.UpdateNone:
+			// none: do not replace, no error
+			return nil
+		case config.UpdateNoneFail:
+			// none-fail: do not replace, error
+			return fmt.Errorf("'%s': file exists", dst)
+		case config.UpdateReplaceOlder:
+			// older: replace if source is newer
+			if !sourceInfo.ModTime().After(dstFi.ModTime()) {
+				// Source is not newer (older or same), skip
+				return nil
+			}
+		}
+		// UpdateReplaceAll falls through
 	}
 
-	if cfg.Verbose {
-		_, _ = fmt.Fprintf(stdout, "'%s' -> '%s'\n", src, dst)
+	if cfg.Backup {
+		backupName, err := backup.MakeBackup(dst, cfg)
+		if err != nil {
+			return err
+		}
+		if cfg.Verbose && backupName != "" {
+			_, _ = fmt.Fprintf(stdout, "'%s' -> '%s' (backup: '%s')\n", src, dst, backupName)
+		} else if cfg.Verbose {
+			_, _ = fmt.Fprintf(stdout, "'%s' -> '%s'\n", src, dst)
+		}
+	} else {
+		if cfg.Verbose {
+			_, _ = fmt.Fprintf(stdout, "'%s' -> '%s'\n", src, dst)
+		}
 	}
 
 	sourceFile, err := os.Open(src)

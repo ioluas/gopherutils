@@ -2,6 +2,8 @@
 
 `ls` - list directory contents
 
+[GNU's ls Man Page](https://man7.org/linux/man-pages/man1/ls.1.html)
+
 ## Synopsis
 
 `ls [OPTION]... [FILE]...`
