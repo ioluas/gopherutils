@@ -21,7 +21,7 @@ List information about the FILEs (the current directory by default). Sort entrie
 | `-h`       | `--human-readable` | with `-l`, print sizes in human readable format (e.g., 1K 234M 2G) |
 |            | `--si`             | with `-l`, print sizes in powers of 1000 not 1024                  |
 |            | `--block-size`     | with `-l`, scale sizes by SIZE when printing them                  |
-|            | `--time`           | select which timestamp used to display or sort                     |
+|            | `--time`           | select which timestamp is used to display or sort                  |
 |            | `--time-style`     | time/date format with `-l`; see TIME_STYLE below                   |
 |            | `--full-time`      | like `-l --time-style=full-iso`                                    |
 |            | `--author`         | with `-l`, print the author of each file                           |

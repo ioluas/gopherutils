@@ -1,11 +1,13 @@
 //go:build linux
 
-package main
+package timeutil
 
 import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/ioluas/gopherutils/utils/file/ls/internal/config"
 )
 
 func TestGetEntryTimeLinuxAccessChange(t *testing.T) {
@@ -19,13 +21,13 @@ func TestGetEntryTimeLinuxAccessChange(t *testing.T) {
 		},
 	}
 
-	if got := getEntryTime(info, timeFieldAccess); !got.Equal(atime) {
+	if got := GetEntryTime(info, config.TimeFieldAccess); !got.Equal(atime) {
 		t.Fatalf("getEntryTime access = %v, want %v", got, atime)
 	}
-	if got := getEntryTime(info, timeFieldChange); !got.Equal(ctime) {
+	if got := GetEntryTime(info, config.TimeFieldChange); !got.Equal(ctime) {
 		t.Fatalf("getEntryTime change = %v, want %v", got, ctime)
 	}
-	if got := getEntryTime(info, timeFieldBirth); !got.Equal(info.modTime) {
+	if got := GetEntryTime(info, config.TimeFieldBirth); !got.Equal(info.modTime) {
 		t.Fatalf("getEntryTime birth = %v, want fallback %v", got, info.modTime)
 	}
 }
