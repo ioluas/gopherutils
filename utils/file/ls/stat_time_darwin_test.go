@@ -1,0 +1,30 @@
+//go:build darwin
+
+package main
+
+import (
+	"syscall"
+	"testing"
+	"time"
+)
+
+func TestStatTimeDarwin(t *testing.T) {
+	atime := time.Unix(1, 2)
+	ctime := time.Unix(3, 4)
+	btime := time.Unix(5, 6)
+	stat := &syscall.Stat_t{
+		Atimespec:     syscall.Timespec{Sec: atime.Unix(), Nsec: int64(atime.Nanosecond())},
+		Ctimespec:     syscall.Timespec{Sec: ctime.Unix(), Nsec: int64(ctime.Nanosecond())},
+		Birthtimespec: syscall.Timespec{Sec: btime.Unix(), Nsec: int64(btime.Nanosecond())},
+	}
+
+	if got := statAtime(stat); !got.Equal(atime) {
+		t.Fatalf("statAtime = %v, want %v", got, atime)
+	}
+	if got := statCtime(stat); !got.Equal(ctime) {
+		t.Fatalf("statCtime = %v, want %v", got, ctime)
+	}
+	if got, ok := statBirthtime(stat); !ok || !got.Equal(btime) {
+		t.Fatalf("statBirthtime = %v ok=%v, want %v ok=true", got, ok, btime)
+	}
+}
