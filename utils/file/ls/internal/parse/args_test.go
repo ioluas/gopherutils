@@ -369,6 +369,19 @@ func TestParseArgs(t *testing.T) {
 			},
 		},
 		{
+			name:        "-D flag only (implies -l)",
+			args:        []string{"-D"},
+			expectError: false,
+			checkConfig: func(t *testing.T, config *config.Config) {
+				if !config.Dired {
+					t.Error("Expected Dired to be true")
+				}
+				if !config.LongListing {
+					t.Error("Expected LongListing to be true because of -D")
+				}
+			},
+		},
+		{
 			name:        "unknown flag",
 			args:        []string{"-x"},
 			expectError: true,
@@ -555,5 +568,52 @@ func TestParseArgsErrorCases(t *testing.T) {
 				t.Errorf("Unexpected error: %v", err)
 			}
 		})
+	}
+}
+
+func TestParseArgsQuotingStyle(t *testing.T) {
+	// 1. Explicit flag
+	cfg, err := ParseArgs([]string{"--quoting-style=shell"}, io.Discard)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if cfg.QuotingStyle != config.QuotingStyleShell {
+		t.Errorf("Expected QuotingStyleShell, got %v", cfg.QuotingStyle)
+	}
+
+	// 2. -b flag (escape)
+	cfg, err = ParseArgs([]string{"-b"}, io.Discard)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if cfg.QuotingStyle != config.QuotingStyleEscape {
+		t.Errorf("Expected QuotingStyleEscape, got %v", cfg.QuotingStyle)
+	}
+
+	// 3. flag overrides -b
+	cfg, err = ParseArgs([]string{"-b", "--quoting-style=literal"}, io.Discard)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if cfg.QuotingStyle != config.QuotingStyleLiteral {
+		t.Errorf("Expected QuotingStyleLiteral, got %v", cfg.QuotingStyle)
+	}
+
+	// 4. Default (literal)
+	cfg, err = ParseArgs([]string{}, io.Discard)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if cfg.QuotingStyle != config.QuotingStyleLiteral {
+		t.Errorf("Expected QuotingStyleLiteral, got %v", cfg.QuotingStyle)
+	}
+
+	// 5. Dired default
+	cfg, err = ParseArgs([]string{"-D"}, io.Discard)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if cfg.QuotingStyle != config.QuotingStyleShellEscape {
+		t.Errorf("Expected QuotingStyleShellEscape for Dired, got %v", cfg.QuotingStyle)
 	}
 }

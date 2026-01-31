@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/spf13/pflag"
 
@@ -18,6 +19,7 @@ func ParseArgs(args []string, stderr io.Writer) (*config.Config, error) {
 	cfg := &config.Config{}
 	var showHelp bool
 	var blockSizeRaw string
+	var quotingStyleRaw string
 	var timeWord string
 	var timeStyleRaw string
 
@@ -44,7 +46,9 @@ func ParseArgs(args []string, stderr io.Writer) (*config.Config, error) {
 	flagSet.BoolVarP(&cfg.Columnate, "C", "C", false, "list entries by columns")
 	flagSet.BoolVarP(&cfg.OnePerLine, "one-file-per-line", "1", false, "list one file per line")
 	flagSet.BoolVarP(&cfg.ListDirectory, "directory", "d", false, "list directories themselves, not their contents")
+	flagSet.BoolVarP(&cfg.Dired, "dired", "D", false, "generate output designed for Emacs' dired mode")
 	flagSet.StringVar(&blockSizeRaw, "block-size", "", "with -l, scale sizes by SIZE when printing them; e.g., '--block-size=M'")
+	flagSet.StringVar(&quotingStyleRaw, "quoting-style", "", "use quoting style WORD for entry names: literal, locale, shell, shell-always, shell-escape, shell-escape-always, c, escape") // Added: StringVar
 	flagSet.BoolVarP(&showHelp, "help", "?", false, "display this help and exit")
 
 	_ = flagSet.MarkHidden("sort-time")
@@ -65,6 +69,60 @@ func ParseArgs(args []string, stderr io.Writer) (*config.Config, error) {
 			return nil, pflag.ErrHelp
 		}
 		return nil, err
+	}
+
+	// Handle Quoting Style
+	// Precedence: --quoting-style > -b/--escape (implies escape) > QUOTING_STYLE env > Dired default > Default (literal)
+	var styleStr string
+	isEnv := false
+
+	if flagSet.Changed("quoting-style") {
+		styleStr = quotingStyleRaw
+	} else if cfg.Escape {
+		styleStr = "escape"
+	} else {
+		styleStr = os.Getenv("QUOTING_STYLE")
+		isEnv = true
+	}
+
+	if styleStr != "" {
+		switch strings.ToLower(styleStr) {
+		case "literal":
+			cfg.QuotingStyle = config.QuotingStyleLiteral
+		case "locale":
+			cfg.QuotingStyle = config.QuotingStyleLocale
+		case "shell":
+			cfg.QuotingStyle = config.QuotingStyleShell
+		case "shell-always":
+			cfg.QuotingStyle = config.QuotingStyleShellAlways
+		case "shell-escape":
+			cfg.QuotingStyle = config.QuotingStyleShellEscape
+		case "shell-escape-always":
+			cfg.QuotingStyle = config.QuotingStyleShellEscapeAlways
+		case "c":
+			cfg.QuotingStyle = config.QuotingStyleC
+		case "escape":
+			cfg.QuotingStyle = config.QuotingStyleEscape
+		default:
+			if isEnv {
+				_, _ = fmt.Fprintf(stderr, "ls: ignoring invalid value of environment variable QUOTING_STYLE: '%s'\n", styleStr)
+			} else {
+				return nil, fmt.Errorf("invalid argument '%s' for '--quoting-style'", styleStr)
+			}
+			// Fallback if env var was invalid
+			if cfg.Dired {
+				cfg.QuotingStyle = config.QuotingStyleShellEscape
+			} else {
+				cfg.QuotingStyle = config.QuotingStyleLiteral
+			}
+		}
+	} else {
+		// No style specified
+		if cfg.Dired {
+			cfg.QuotingStyle = config.QuotingStyleShellEscape
+		} else {
+			cfg.QuotingStyle = config.QuotingStyleLiteral
+		}
 	}
 
 	// Get remaining arguments after flags (the directory path)
@@ -137,6 +195,11 @@ func ParseArgs(args []string, stderr io.Writer) (*config.Config, error) {
 			cfg.FormatMode = config.FormatOnePerLine
 			break
 		}
+	}
+
+	// -D implies -l (GNU ls behavior)
+	if cfg.Dired {
+		cfg.LongListing = true
 	}
 
 	return cfg, nil

@@ -115,28 +115,28 @@ func TestLongListFormatArgsCombinations(t *testing.T) {
 	// Case 1: ShowAuthor=true, NoGroup=true
 	cfg := &config.Config{ShowAuthor: true, NoGroup: true}
 	format, args := longListFormatArgs(d, widths, cfg)
-	if !strings.Contains(format, "%-*s %-*s") || len(args) != 11 {
+	if !strings.Contains(format, "%-*s %-*s") || len(args) != 10 {
 		t.Errorf("Unexpected format or args for Author+NoGroup: %q, %d", format, len(args))
 	}
 
 	// Case 2: ShowAuthor=true, NoGroup=false
 	cfg = &config.Config{ShowAuthor: true, NoGroup: false}
 	format, args = longListFormatArgs(d, widths, cfg)
-	if !strings.Contains(format, "%-*s %-*s %-*s") || len(args) != 13 {
+	if !strings.Contains(format, "%-*s %-*s %-*s") || len(args) != 12 {
 		t.Errorf("Unexpected format or args for Author: %q, %d", format, len(args))
 	}
 
 	// Case 3: ShowAuthor=false, NoGroup=true
 	cfg = &config.Config{ShowAuthor: false, NoGroup: true}
 	format, args = longListFormatArgs(d, widths, cfg)
-	if strings.Contains(format, "%-*s %-*s %-*s") || len(args) != 9 {
+	if strings.Contains(format, "%-*s %-*s %-*s") || len(args) != 8 {
 		t.Errorf("Unexpected format or args for NoGroup: %q, %d", format, len(args))
 	}
 
 	// Case 4: Default (both false)
 	cfg = &config.Config{ShowAuthor: false, NoGroup: false}
 	_, args = longListFormatArgs(d, widths, cfg)
-	if len(args) != 11 {
+	if len(args) != 10 {
 		t.Errorf("Unexpected args for default: %d", len(args))
 	}
 }
@@ -433,5 +433,26 @@ func TestPrintGrid(t *testing.T) {
 				t.Errorf("PrintGrid(%v, %d) got:\n%q\nwant:\n%q", tt.names, tt.width, actual, tt.expected)
 			}
 		})
+	}
+}
+
+func TestShellQuote(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"simple", "simple"},
+		{"file name", "'file name'"},
+		{"file\nname", "'file\nname'"},
+		{"file'name", "'file'\\''name'"}, // Single quote escaping
+		{"", "''"},
+		{"foo*", "'foo*'"},
+		{"param$name", "'param$name'"},
+	}
+	for _, tt := range tests {
+		got := ShellQuote(tt.input)
+		if got != tt.expected {
+			t.Errorf("ShellQuote(%q) = %q, want %q", tt.input, got, tt.expected)
+		}
 	}
 }

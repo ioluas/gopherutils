@@ -67,14 +67,12 @@ func run(path string, config *config.Config, stdout, stderr io.Writer) int {
 		entries := []os.DirEntry{entry}
 
 		if config.LongListing {
-			if display.PrintLongList(stdout, stderr, entries, config) {
+			if display.PrintLongList(stdout, stderr, entries, config, false) {
 				return 2
 			}
 		} else {
 			name := entry.Name()
-			if config.Escape {
-				name = display.QuoteName(name)
-			}
+			name = display.Quote(name, config.QuotingStyle)
 			display.PrintEntries(stdout, []string{name}, config)
 		}
 		return 0
@@ -188,16 +186,14 @@ func run(path string, config *config.Config, stdout, stderr io.Writer) int {
 	}
 
 	if config.LongListing {
-		if display.PrintLongList(stdout, stderr, filtered, config) {
+		if display.PrintLongList(stdout, stderr, filtered, config, true) {
 			hadError = true
 		}
 	} else {
 		names := make([]string, len(filtered))
 		for i, e := range filtered {
 			name := e.Name()
-			if config.Escape {
-				name = display.QuoteName(name)
-			}
+			name = display.Quote(name, config.QuotingStyle)
 			names[i] = name
 		}
 		display.PrintEntries(stdout, names, config)

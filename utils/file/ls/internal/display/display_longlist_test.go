@@ -216,7 +216,7 @@ func TestPrintLongList(t *testing.T) {
 			stderr := new(bytes.Buffer)
 
 			// The `hadError` check remains from the previous refactoring
-			hadError := PrintLongList(stdout, stderr, tt.entries, tt.config)
+			hadError := PrintLongList(stdout, stderr, tt.entries, tt.config, false)
 			if hadError != tt.expectedError {
 				t.Errorf("Test %s: Expected error=%v, got %v", tt.name, tt.expectedError, hadError)
 			}
@@ -246,7 +246,7 @@ func TestPrintLongListWithCachedDirEntryError(t *testing.T) {
 
 	lsConfig := &config.Config{}
 	var stdout, stderr bytes.Buffer
-	hadError := PrintLongList(&stdout, &stderr, entries, lsConfig)
+	hadError := PrintLongList(&stdout, &stderr, entries, lsConfig, false)
 
 	if !hadError {
 		t.Error("expected error to be reported")
