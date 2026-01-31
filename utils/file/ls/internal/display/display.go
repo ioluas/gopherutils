@@ -319,8 +319,8 @@ func PrintGrid(w io.Writer, names []string, termWidth int) {
 
 		// Calculate total width required
 		totalWidth := 0
-		for _, w := range colWidths {
-			totalWidth += w
+		for _, width := range colWidths {
+			totalWidth += width
 		}
 		totalWidth += (cols - 1) * padding
 
