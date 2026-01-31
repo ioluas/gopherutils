@@ -32,13 +32,11 @@ func TestUnicodeSorting(t *testing.T) {
 	}
 
 	// Track which files were actually created (macOS may normalize some filenames)
-	var createdFiles []string
 	for _, name := range requestedFiles {
 		if err := os.WriteFile(filepath.Join(tmpDir, name), []byte(""), 0644); err != nil {
 			t.Logf("warning: failed to create file %s: %v (may be due to filesystem normalization)", name, err)
 			continue
 		}
-		createdFiles = append(createdFiles, name)
 	}
 
 	// Read back what was actually created to handle filesystem normalization
