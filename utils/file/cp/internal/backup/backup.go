@@ -17,7 +17,7 @@ func MakeBackup(path string, cfg *config.Config) (string, error) {
 		return "", nil
 	}
 
-	// Check if file exists
+	// Check if the file exists
 	_, err := os.Stat(path)
 	if os.IsNotExist(err) {
 		return "", nil
