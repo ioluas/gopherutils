@@ -880,6 +880,55 @@ func TestExecute(t *testing.T) {
 			t.Errorf("dst1 and dst2 should NOT be hardlinked")
 		}
 	})
+
+	t.Run("Preserve links with backup", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("skipping hard link test on windows")
+		}
+		// Create src1 and its hardlink src2
+		src1 := createFile("blink_src1.txt", "content")
+		src2 := filepath.Join(tempDir, "blink_src2.txt")
+		if err := os.Link(src1, src2); err != nil {
+			t.Fatalf("link failed: %v", err)
+		}
+
+		dstDir := filepath.Join(tempDir, "blink_dst_dir")
+		if err := os.Mkdir(dstDir, 0755); err != nil {
+			t.Fatalf("mkdir failed: %v", err)
+		}
+
+		// Create existing destination files to trigger backup
+		dst1 := filepath.Join(dstDir, "blink_src1.txt")
+		if err := os.WriteFile(dst1, []byte("old1"), 0644); err != nil {
+			t.Fatalf("write dst1 failed: %v", err)
+		}
+		dst2 := filepath.Join(dstDir, "blink_src2.txt")
+		if err := os.WriteFile(dst2, []byte("old2"), 0644); err != nil {
+			t.Fatalf("write dst2 failed: %v", err)
+		}
+
+		// cp --preserve=links --backup src1 src2 dstDir/
+		_, err := runCp("--preserve=links", "--backup", src1, src2, dstDir)
+		if err != nil {
+			t.Errorf("cp failed: %v", err)
+		}
+
+		// Verify content
+		checkContent(dst1, "content")
+		checkContent(dst2, "content")
+
+		// Verify hard link
+		fi1, _ := os.Stat(dst1)
+		fi2, _ := os.Stat(dst2)
+		if !sameDevIno(fi1, fi2) {
+			t.Errorf("dst1 and dst2 should be hardlinked")
+		}
+
+		// Verify backups exist
+		// Default backup is simple (~ suffix)
+		checkContent(dst1+"~", "old1")
+		checkContent(dst2+"~", "old2")
+	})
 }
 
 type mockFileInfo struct {

@@ -36,7 +36,7 @@ func Args(args []string, stderr io.Writer) (*config.Config, error) {
 	// Update Mode Flags handling
 	// We use custom flags for --update and --no-clobber to ensure "last one wins" precedence
 	// by modifying the shared cfg.UpdateMode directly during parsing.
-	
+
 	// Default behavior
 	cfg.UpdateMode = config.UpdateReplaceAll
 
@@ -144,159 +144,106 @@ func Args(args []string, stderr io.Writer) (*config.Config, error) {
 		cfg.Suffix = os.Getenv("SIMPLE_BACKUP_SUFFIX")
 	}
 
-		if cfg.Suffix == "" {
+	if cfg.Suffix == "" {
 
-			cfg.Suffix = "~"
-
-		}
-
-	
-
-		// Calculate Preserve Options
-
-		cfg.Preserve = resolvePreserveOptions(preserveActions)
-
-	
-
-		return cfg, nil
+		cfg.Suffix = "~"
 
 	}
 
-	
+	// Calculate Preserve Options
 
-	type updateFlag struct {
+	cfg.Preserve = resolvePreserveOptions(preserveActions)
 
-		mode *config.UpdateMode
+	return cfg, nil
 
-	}
+}
 
-	
+type updateFlag struct {
+	mode *config.UpdateMode
+}
 
-	func (f *updateFlag) String() string {
+func (f *updateFlag) String() string {
 
-		// We don't really strictly implement String() reflecting current state for usage,
+	// We don't really strictly implement String() reflecting current state for usage,
 
-		// just return something or empty.
+	// just return something or empty.
 
-		return ""
+	return ""
 
-	}
+}
 
-	
+func (f *updateFlag) Set(val string) error {
 
-	func (f *updateFlag) Set(val string) error {
+	m, err := parseUpdateMode(val)
 
-		m, err := parseUpdateMode(val)
+	if err != nil {
 
-		if err != nil {
-
-			return err
-
-		}
-
-		*f.mode = m
-
-		return nil
+		return err
 
 	}
 
-	
+	*f.mode = m
 
-	func (f *updateFlag) Type() string {
+	return nil
 
-		return "string"
+}
 
-	}
+func (f *updateFlag) Type() string {
 
-	
+	return "string"
 
-	type noClobberFlag struct {
+}
 
-		mode *config.UpdateMode
+type noClobberFlag struct {
+	mode *config.UpdateMode
+}
 
-	}
+func (f *noClobberFlag) String() string {
 
-	
+	return "false"
 
-	func (f *noClobberFlag) String() string {
+}
 
-		return "false"
+func (f *noClobberFlag) Set(val string) error {
 
-	}
+	b, err := strconv.ParseBool(val)
 
-	
+	if err != nil {
 
-	func (f *noClobberFlag) Set(val string) error {
-
-	
-
-		b, err := strconv.ParseBool(val)
-
-	
-
-		if err != nil {
-
-	
-
-			return fmt.Errorf("invalid boolean value '%s' for -n/--no-clobber", val)
-
-	
-
-		}
-
-	
-
-		if b {
-
-	
-
-			*f.mode = config.UpdateNone
-
-	
-
-		} else {
-
-	
-
-			// If --no-clobber=false is passed, it implies clobbering is allowed.
-
-	
-
-			// We reset to default (ReplaceAll).
-
-	
-
-			*f.mode = config.UpdateReplaceAll
-
-	
-
-		}
-
-	
-
-		return nil
-
-	
+		return fmt.Errorf("invalid boolean value '%s' for -n/--no-clobber", val)
 
 	}
 
-	
+	if b {
 
-	func (f *noClobberFlag) Type() string {
+		*f.mode = config.UpdateNone
 
-		return "bool"
+	} else {
 
-	}
+		// If --no-clobber=false is passed, it implies clobbering is allowed.
 
-	
+		// We reset to default (ReplaceAll).
 
-	type preserveAction struct {
-
-		enable bool
-
-		attrs  []string // "mode", "ownership", ... or "defaults" or "all"
+		*f.mode = config.UpdateReplaceAll
 
 	}
+
+	return nil
+
+}
+
+func (f *noClobberFlag) Type() string {
+
+	return "bool"
+
+}
+
+type preserveAction struct {
+	enable bool
+
+	attrs []string // "mode", "ownership", ... or "defaults" or "all"
+
+}
 
 // preserveFlag collects actions in order
 type preserveFlag struct {

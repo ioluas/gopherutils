@@ -313,15 +313,15 @@ func TestArgs(t *testing.T) {
 			wantPreserve: config.PreserveOptions{}, // All false
 		},
 		{
-			name: "Precedence short flags combined (-nu)",
-			args: []string{"-nu", "src", "dest"},
+			name:        "Precedence short flags combined (-nu)",
+			args:        []string{"-nu", "src", "dest"},
 			wantSources: []string{"src"},
 			wantDest:    "dest",
 			wantUpdate:  config.UpdateReplaceOlder, // u wins
 		},
 		{
-			name: "Precedence short flags combined (-un)",
-			args: []string{"-un", "src", "dest"},
+			name:        "Precedence short flags combined (-un)",
+			args:        []string{"-un", "src", "dest"},
 			wantSources: []string{"src"},
 			wantDest:    "dest",
 			wantUpdate:  config.UpdateNone, // n wins
