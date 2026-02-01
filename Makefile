@@ -147,6 +147,7 @@ help:
 	@echo "  vet          - Vet Go code"
 	@echo "  staticcheck  - Run staticcheck"
 	@echo "  CQ           - Run lint, vet, staticcheck, fmt, and coverage"
+	@echo "  gui          - Show Tcl GUI of this Makefile"
 	@echo "  help         - Show this help message"
 
 

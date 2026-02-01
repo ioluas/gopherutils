@@ -120,31 +120,19 @@ func TestMakeBackup(t *testing.T) {
 	})
 
 	t.Run("Existing backup (triggers error on stat)", func(t *testing.T) {
-		if os.Getuid() == 0 {
-			t.Skip("skipping permission test as root")
+		path := createFile("exist_stat_err")
+		// Create path.~1~ as a symlink loop
+		sym := path + ".~1~"
+		if err := os.Symlink(sym, sym); err != nil {
+			t.Fatalf("failed to create symlink: %v", err)
 		}
-		// Create a directory and make it unreadable/unsearchable
-		subDir := filepath.Join(tempDir, "stat_err_dir")
-		if err := os.Mkdir(subDir, 0755); err != nil {
-			t.Fatalf("failed to create dir: %v", err)
-		}
-		path := filepath.Join(subDir, "file")
-		if err := os.WriteFile(path, []byte("content"), 0644); err != nil {
-			t.Fatalf("failed to write file: %v", err)
-		}
-
-		// Remove search permission from subdir
-		if err := os.Chmod(subDir, 0000); err != nil {
-			t.Fatalf("failed to chmod: %v", err)
-		}
-		defer func() { _ = os.Chmod(subDir, 0755) }()
 
 		cfg := &config.Config{Backup: true, BackupMethod: config.BackupExisting}
-		// This should fail to stat path + ".~1~" because subDir is unsearchable
 		_, err := MakeBackup(path, cfg)
 		if err == nil {
 			t.Error("expected error on stat for BackupExisting")
 		}
+		// Expect ELOOP or similar
 	})
 
 	t.Run("MakeBackup fails on rename", func(t *testing.T) {
@@ -197,7 +185,7 @@ func TestMakeBackup(t *testing.T) {
 		if os.Getuid() == 0 {
 			t.Skip("skipping permission test as root")
 		}
-		// Create a directory and make it unreadable
+		// Create a directory and make it executable (searchable) but not readable
 		subDir := filepath.Join(tempDir, "noreaddir")
 		if err := os.Mkdir(subDir, 0755); err != nil {
 			t.Fatalf("failed to create dir: %v", err)
@@ -210,8 +198,8 @@ func TestMakeBackup(t *testing.T) {
 		// We need BackupNumbered to trigger findNextNumberedName
 		cfg := &config.Config{Backup: true, BackupMethod: config.BackupNumbered}
 
-		// Make dir unreadable so ReadDir fails
-		if err := os.Chmod(subDir, 0000); err != nil {
+		// Make dir executable but not readable: 0100
+		if err := os.Chmod(subDir, 0100); err != nil {
 			t.Fatalf("failed to chmod: %v", err)
 		}
 		defer func() { _ = os.Chmod(subDir, 0755) }()
@@ -243,6 +231,18 @@ func TestMakeBackup(t *testing.T) {
 		}
 		if name != "" {
 			t.Errorf("expected no backup name, got %q", name)
+		}
+	})
+
+	t.Run("Unsupported backup method", func(t *testing.T) {
+		path := createFile("unsupported")
+		cfg := &config.Config{Backup: true, BackupMethod: config.BackupMethod(999)}
+		_, err := MakeBackup(path, cfg)
+		if err == nil {
+			t.Error("expected error for unsupported backup method")
+		}
+		if !strings.Contains(err.Error(), "unsupported backup method") {
+			t.Errorf("expected 'unsupported backup method' error, got %v", err)
 		}
 	})
 

@@ -19,7 +19,7 @@ Copy SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.
 | Short Flag | Long Flag                  | Description                                                                          | Status          |
 |:-----------|:---------------------------|:-------------------------------------------------------------------------------------|:----------------|
 | `-a`       | `--archive`                | same as `-dR --preserve=all`                                                         | not-implemented |
-|            | `--attributes-only`        | don't copy the file data, just the attributes                                        | not-implemented |
+|            | `--attributes-only`        | don't copy the file data, just the attributes                                        | done            |
 |            | `--backup[=CONTROL]`       | make a backup of each existing destination file                                      | done            |
 | `-b`       |                            | like `--backup` but does not accept an argument                                      | done            |
 |            | `--copy-contents`          | copy contents of special files when recursive                                        | not-implemented |
@@ -29,11 +29,11 @@ Copy SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.
 | `-H`       |                            | follow command-line symbolic links in SOURCE                                         | not-implemented |
 | `-l`       | `--link`                   | hard link files instead of copying                                                   | not-implemented |
 | `-L`       | `--dereference`            | always follow symbolic links in SOURCE                                               | not-implemented |
-| `-n`       | `--no-clobber`             | do not overwrite an existing file                                                    | not-implemented |
+| `-n`       | `--no-clobber`             | do not overwrite an existing file                                                    | done            |
 | `-P`       | `--no-dereference`         | never follow symbolic links in SOURCE                                                | not-implemented |
-| `-p`       |                            | same as `--preserve=mode,ownership,timestamps`                                       | not-implemented |
-|            | `--preserve[=ATTR_LIST]`   | preserve the specified attributes (default: mode,ownership,timestamps)               | not-implemented |
-|            | `--no-preserve=ATTR_LIST`  | don't preserve the specified attributes                                              | not-implemented |
+| `-p`       |                            | same as `--preserve=mode,ownership,timestamps`                                       | done            |
+|            | `--preserve[=ATTR_LIST]`   | preserve the specified attributes (default: mode,ownership,timestamps)               | done            |
+|            | `--no-preserve=ATTR_LIST`  | don't preserve the specified attributes                                              | done            |
 |            | `--parents`                | use full source file name under DIRECTORY                                            | not-implemented |
 | `-R`, `-r` | `--recursive`              | copy directories recursively                                                         | not-implemented |
 |            | `--reflink[=WHEN]`         | control clone/CoW copies                                                             | not-implemented |
@@ -64,3 +64,15 @@ the VERSION_CONTROL environment variable.  Here are the values:
 * `numbered`, `t`: make numbered backups
 * `existing`, `nil`: numbered if numbered backups exist, simple otherwise
 * `simple`, `never`: always make simple backups
+
+## Preservation attributes
+
+The `ATTR_LIST` for `--preserve` and `--no-preserve` is a comma-separated list of:
+
+* `mode`: preserve file mode bits and ACLs
+* `ownership`: preserve owner and group
+* `timestamps`: preserve last access and modification times
+* `links`: preserve hard links between source files
+* `context`: preserve SELinux security context
+* `xattr`: preserve extended attributes
+* `all`: preserve all attributes

@@ -22,11 +22,23 @@ const (
 
 // Config holds the configuration for the cp utility.
 type Config struct {
-	Sources      []string
-	Dest         string
-	Verbose      bool         // -v, --verbose: explain what is being done
-	Backup       bool         // -b, --backup: make a backup of each existing destination file
-	BackupMethod BackupMethod // Control method for backups
-	Suffix       string       // --suffix: override the usual backup suffix
-	UpdateMode   UpdateMode   // --update: control which existing files are updated
+	Sources        []string
+	Dest           string
+	Verbose        bool         // -v, --verbose: explain what is being done
+	Backup         bool         // -b, --backup: make a backup of each existing destination file
+	BackupMethod   BackupMethod // Control method for backups
+	Suffix         string       // --suffix: override the usual backup suffix
+	UpdateMode     UpdateMode   // --update: control which existing files are updated
+	AttributesOnly bool         // --attributes-only: don't copy the file data, just the attributes
+	Preserve       PreserveOptions
+}
+
+// PreserveOptions holds which attributes should be preserved.
+type PreserveOptions struct {
+	Mode       bool
+	Ownership  bool
+	Timestamps bool
+	Links      bool
+	Context    bool
+	Xattr      bool
 }
