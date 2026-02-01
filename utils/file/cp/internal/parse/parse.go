@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/ioluas/gopherutils/utils/file/cp/internal/config"
@@ -18,7 +19,6 @@ func Args(args []string, stderr io.Writer) (*config.Config, error) {
 	var backupControl string
 	var suffix string
 	var bFlag bool
-	var updateControl string
 
 	flagSet := pflag.NewFlagSet("cp", pflag.ContinueOnError)
 	flagSet.SetOutput(io.Discard)
@@ -33,11 +33,20 @@ func Args(args []string, stderr io.Writer) (*config.Config, error) {
 	// --backup[=CONTROL]
 	flagSet.StringVar(&backupControl, "backup", "", "make a backup of each existing destination file")
 
-	// --update[=UPDATE]
-	flagSet.StringVarP(&updateControl, "update", "u", "", "control which existing files are updated; UPDATE={all,none,none-fail,older(default)}. -u is equivalent to --update[=older]")
+	// Update Mode Flags handling
+	// We use custom flags for --update and --no-clobber to ensure "last one wins" precedence
+	// by modifying the shared cfg.UpdateMode directly during parsing.
+	
+	// Default behavior
+	cfg.UpdateMode = config.UpdateReplaceAll
 
-	var noClobber bool
-	flagSet.BoolVarP(&noClobber, "no-clobber", "n", false, "do not overwrite an existing file (overrides a previous -u)")
+	uFlag := &updateFlag{mode: &cfg.UpdateMode}
+	flagSet.VarP(uFlag, "update", "u", "control which existing files are updated; UPDATE={all,none,none-fail,older(default)}. -u is equivalent to --update[=older]")
+	flagSet.Lookup("update").NoOptDefVal = "older"
+
+	nFlag := &noClobberFlag{mode: &cfg.UpdateMode}
+	flagSet.VarP(nFlag, "no-clobber", "n", "do not overwrite an existing file (overrides a previous -u)")
+	flagSet.Lookup("no-clobber").NoOptDefVal = "true"
 
 	// Preservation flags
 	var preserveActions []preserveAction
@@ -135,67 +144,159 @@ func Args(args []string, stderr io.Writer) (*config.Config, error) {
 		cfg.Suffix = os.Getenv("SIMPLE_BACKUP_SUFFIX")
 	}
 
-	if cfg.Suffix == "" {
-		cfg.Suffix = "~"
+		if cfg.Suffix == "" {
+
+			cfg.Suffix = "~"
+
+		}
+
+	
+
+		// Calculate Preserve Options
+
+		cfg.Preserve = resolvePreserveOptions(preserveActions)
+
+	
+
+		return cfg, nil
+
 	}
 
-	// Determine Update Mode
-	// Default behavior
-	cfg.UpdateMode = config.UpdateReplaceAll
+	
 
-	// Handle precedence between --update and --no-clobber (-n)
-	updateChanged := flagSet.Changed("update")
-	noClobberChanged := flagSet.Changed("no-clobber")
+	type updateFlag struct {
 
-	if updateChanged && !noClobberChanged {
-		mode, err := parseUpdateMode(updateControl)
+		mode *config.UpdateMode
+
+	}
+
+	
+
+	func (f *updateFlag) String() string {
+
+		// We don't really strictly implement String() reflecting current state for usage,
+
+		// just return something or empty.
+
+		return ""
+
+	}
+
+	
+
+	func (f *updateFlag) Set(val string) error {
+
+		m, err := parseUpdateMode(val)
+
 		if err != nil {
-			return nil, err
-		}
-		cfg.UpdateMode = mode
-	} else if noClobberChanged && !updateChanged {
-		cfg.UpdateMode = config.UpdateNone
-	} else if updateChanged && noClobberChanged {
-		// Both are present, find which is last
-		lastIsUpdate := false
-		for _, arg := range args {
-			if arg == "--update" || strings.HasPrefix(arg, "--update=") || arg == "-u" || strings.HasPrefix(arg, "-u") {
-				lastIsUpdate = true
-			}
-			if arg == "--no-clobber" || arg == "-n" || strings.Contains(arg, "n") && strings.HasPrefix(arg, "-") && !strings.HasPrefix(arg, "--") {
-				// Naive check for -n in short flags like -vn
-				if !strings.HasPrefix(arg, "--") && strings.HasPrefix(arg, "-") {
-					if strings.Contains(arg, "n") {
-						lastIsUpdate = false
-					}
-				}
-				if arg == "--no-clobber" {
-					lastIsUpdate = false
-				}
-			}
+
+			return err
+
 		}
 
-		if lastIsUpdate {
-			mode, err := parseUpdateMode(updateControl)
-			if err != nil {
-				return nil, err
-			}
-			cfg.UpdateMode = mode
-		} else {
-			cfg.UpdateMode = config.UpdateNone
-		}
+		*f.mode = m
+
+		return nil
+
 	}
 
-	// Calculate Preserve Options
-	cfg.Preserve = resolvePreserveOptions(preserveActions)
+	
 
-	return cfg, nil
-}
+	func (f *updateFlag) Type() string {
 
-type preserveAction struct {
-	enable bool
-	attrs  []string // "mode", "ownership", ... or "defaults" or "all"
-}
+		return "string"
+
+	}
+
+	
+
+	type noClobberFlag struct {
+
+		mode *config.UpdateMode
+
+	}
+
+	
+
+	func (f *noClobberFlag) String() string {
+
+		return "false"
+
+	}
+
+	
+
+	func (f *noClobberFlag) Set(val string) error {
+
+	
+
+		b, err := strconv.ParseBool(val)
+
+	
+
+		if err != nil {
+
+	
+
+			return fmt.Errorf("invalid boolean value '%s' for -n/--no-clobber", val)
+
+	
+
+		}
+
+	
+
+		if b {
+
+	
+
+			*f.mode = config.UpdateNone
+
+	
+
+		} else {
+
+	
+
+			// If --no-clobber=false is passed, it implies clobbering is allowed.
+
+	
+
+			// We reset to default (ReplaceAll).
+
+	
+
+			*f.mode = config.UpdateReplaceAll
+
+	
+
+		}
+
+	
+
+		return nil
+
+	
+
+	}
+
+	
+
+	func (f *noClobberFlag) Type() string {
+
+		return "bool"
+
+	}
+
+	
+
+	type preserveAction struct {
+
+		enable bool
+
+		attrs  []string // "mode", "ownership", ... or "defaults" or "all"
+
+	}
 
 // preserveFlag collects actions in order
 type preserveFlag struct {
@@ -258,6 +359,11 @@ func resolvePreserveOptions(actions []preserveAction) config.PreserveOptions {
 				opts.Context = val
 			case "xattr":
 				opts.Xattr = val
+			case "defaults":
+				opts.Mode = val
+				opts.Ownership = val
+				opts.Timestamps = val
+				opts.Links = val
 			case "all":
 				opts.Mode = val
 				opts.Ownership = val

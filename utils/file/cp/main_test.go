@@ -489,6 +489,41 @@ func TestExecute(t *testing.T) {
 		checkContent(dst, "old_content")
 	})
 
+	t.Run("Attributes only with preserve (-p)", func(t *testing.T) {
+		src := createFile("attr_pres_src.txt", "content")
+		// Set weird mode and old time
+		oldTime := time.Now().Add(-24 * time.Hour)
+		if err := os.Chtimes(src, oldTime, oldTime); err != nil {
+			t.Fatalf("chtimes failed: %v", err)
+		}
+		if err := os.Chmod(src, 0700); err != nil {
+			t.Fatalf("chmod failed: %v", err)
+		}
+
+		dst := filepath.Join(tempDir, "attr_pres_dst.txt")
+		_, err := runCp("--attributes-only", "-p", src, dst)
+		if err != nil {
+			t.Errorf("cp failed: %v", err)
+		}
+
+		// File should be empty
+		checkContent(dst, "")
+
+		fiDst, err := os.Stat(dst)
+		if err != nil {
+			t.Fatalf("stat dst failed: %v", err)
+		}
+
+		// Check Mode
+		if fiDst.Mode().Perm() != 0700 {
+			t.Errorf("expected mode 0700, got %v", fiDst.Mode().Perm())
+		}
+		// Check Time
+		if fiDst.ModTime().Sub(oldTime).Abs() > time.Second {
+			t.Errorf("expected time %v, got %v", oldTime, fiDst.ModTime())
+		}
+	})
+
 	t.Run("Numbered backup", func(t *testing.T) {
 		src := createFile("num_src.txt", "new")
 		dst := createFile("num_dst.txt", "old")
@@ -558,7 +593,7 @@ func TestExecute(t *testing.T) {
 		}
 		defer func() {
 			if err := os.Unsetenv("VERSION_CONTROL"); err != nil {
-				t.Fatalf("failed to unset env: %v", err)
+				t.Errorf("failed to unset env: %v", err)
 			}
 		}()
 
@@ -593,7 +628,7 @@ func TestExecute(t *testing.T) {
 		}
 		defer func() {
 			if err := os.Unsetenv("SIMPLE_BACKUP_SUFFIX"); err != nil {
-				t.Fatalf("failed to unset env: %v", err)
+				t.Errorf("failed to unset env: %v", err)
 			}
 		}()
 
@@ -800,6 +835,49 @@ func TestExecute(t *testing.T) {
 
 		if !sameDevIno(fi1, fi2) {
 			t.Errorf("dst1 and dst2 are not hardlinked (inodes differ)")
+		}
+	})
+
+	t.Run("Preserve links respects no-clobber", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("skipping hard link test on windows")
+		}
+		// Create src1 and its hardlink src2
+		src1 := createFile("nlink_src1.txt", "content")
+		src2 := filepath.Join(tempDir, "nlink_src2.txt")
+		if err := os.Link(src1, src2); err != nil {
+			t.Fatalf("link failed: %v", err)
+		}
+
+		// Create dst1 and dst2. dst2 already exists with DIFFERENT content.
+		dstDir := filepath.Join(tempDir, "nlink_dst_dir")
+		if err := os.Mkdir(dstDir, 0755); err != nil {
+			t.Fatalf("mkdir failed: %v", err)
+		}
+		dst1 := filepath.Join(dstDir, "nlink_src1.txt") // will be created
+		dst2 := filepath.Join(dstDir, "nlink_src2.txt")
+		if err := os.WriteFile(dst2, []byte("pre-existing"), 0644); err != nil {
+			t.Fatalf("write failed: %v", err)
+		}
+
+		// cp -n --preserve=links src1 src2 dstDir/
+		// src1 -> dst1 (created)
+		// src2 -> dst2 (skipped because exists and -n)
+		_, err := runCp("-n", "--preserve=links", src1, src2, dstDir)
+		if err != nil {
+			t.Errorf("cp failed: %v", err)
+		}
+
+		// Verify dst1 has "content"
+		checkContent(dst1, "content")
+		// Verify dst2 still has "pre-existing"
+		checkContent(dst2, "pre-existing")
+
+		// Verify they are NOT hardlinked
+		fi1, _ := os.Stat(dst1)
+		fi2, _ := os.Stat(dst2)
+		if sameDevIno(fi1, fi2) {
+			t.Errorf("dst1 and dst2 should NOT be hardlinked")
 		}
 	})
 }

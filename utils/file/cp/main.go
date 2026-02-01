@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"syscall"
-	"time"
 
 	"github.com/ioluas/gopherutils/utils/file/cp/internal/backup"
 	"github.com/ioluas/gopherutils/utils/file/cp/internal/config"
@@ -102,33 +101,6 @@ func copyFile(src, dst string, cfg *config.Config, linkMap map[devIno]string, st
 		return fmt.Errorf("omitting directory '%s'", src)
 	}
 
-	// Hard Link Preservation
-	if cfg.Preserve.Links {
-		if di, ok := getDevIno(sourceInfo); ok {
-			if existingDst, found := linkMap[di]; found {
-				// Create hard link
-				// Remove dst if exists?
-				if _, err := os.Stat(dst); err == nil {
-					// Check if same file?
-					// If we are here, we are linking to existingDst.
-					// We should probably remove dst before linking?
-					// Standard cp behavior: remove destination before linking.
-					if err := os.Remove(dst); err != nil {
-						return err
-					}
-				}
-				if err := os.Link(existingDst, dst); err != nil {
-					return err
-				}
-				if cfg.Verbose {
-					_, _ = fmt.Fprintf(stdout, "'%s' -> '%s' (hard link to '%s')\n", src, dst, existingDst)
-				}
-				return nil
-			}
-			// Will add to map after successful copy
-		}
-	}
-
 	// Check if dst is a directory
 	destInfo, err := os.Stat(dst)
 	if err == nil && destInfo.IsDir() {
@@ -160,6 +132,40 @@ func copyFile(src, dst string, cfg *config.Config, linkMap map[devIno]string, st
 			}
 		}
 		// UpdateReplaceAll falls through
+	}
+
+	// Hard Link Preservation
+	if cfg.Preserve.Links {
+		if di, ok := getDevIno(sourceInfo); ok {
+			if existingDst, found := linkMap[di]; found {
+				backupName := ""
+				if dstErr == nil {
+					if cfg.Backup {
+						var err error
+						backupName, err = backup.MakeBackup(dst, cfg)
+						if err != nil {
+							return err
+						}
+					} else {
+						if err := os.Remove(dst); err != nil {
+							return err
+						}
+					}
+				}
+				if err := os.Link(existingDst, dst); err != nil {
+					return err
+				}
+				if cfg.Verbose {
+					if backupName != "" {
+						_, _ = fmt.Fprintf(stdout, "'%s' -> '%s' (hard link to '%s', backup: '%s')\n", src, dst, existingDst, backupName)
+					} else {
+						_, _ = fmt.Fprintf(stdout, "'%s' -> '%s' (hard link to '%s')\n", src, dst, existingDst)
+					}
+				}
+				return nil
+			}
+			// Will add to map after successful copy
+		}
 	}
 
 	backupName := ""
@@ -261,11 +267,7 @@ func preserveAttributes(dst string, srcInfo os.FileInfo, opts config.PreserveOpt
 		// Go's os.Chtimes takes (atime, mtime).
 		// We can get atime from Sys().
 		mtime := srcInfo.ModTime()
-		atime := mtime // Fallback
-		if stat, ok := srcInfo.Sys().(*syscall.Stat_t); ok {
-			// Linux/Unix specific
-			atime = time.Unix(int64(stat.Atim.Sec), int64(stat.Atim.Nsec))
-		}
+		atime := getAccessTime(srcInfo)
 		if err := os.Chtimes(dst, atime, mtime); err != nil {
 			return fmt.Errorf("preserving times for '%s': %w", dst, err)
 		}

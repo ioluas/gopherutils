@@ -313,38 +313,18 @@ func TestArgs(t *testing.T) {
 			wantPreserve: config.PreserveOptions{}, // All false
 		},
 		{
-			name: "Precedence short flags combined (-nu)", // -n and -u. Last one is u?
-			// "cp -nu src dest" -> -n then -u.
-			// But pflag parsing of -nu depends on definition.
-			// -n is no-clobber (bool). -u is update (string with NoOptDefVal).
-			// If -n is defined as bool, -nu is -n and -u.
-			// The order in args is "-nu".
-			// My logic checks if string contains "n".
-			// And "u" ... wait.
-			// If arg is "-nu", it starts with "-" and not "--".
-			// It contains "n". lastIsUpdate = false.
-			// Does it contain "u"?
-			// The loop checks:
-			// if arg == "-u" || strings.HasPrefix(arg, "-u") ...
-			// It does NOT match "-u" logic for combined flags properly in the naive loop!
-			// My naive loop in parse.go:
-			// if arg == "-u" || strings.HasPrefix(arg, "-u") { lastIsUpdate = true }
-			// "-nu" does NOT start with "-u".
-			// So it sees "n" but not "u".
-			// So it thinks -n wins.
-			// But pflag sees both.
-			// GNU cp -nu -> -n then -u? Or -n and -u?
-			// If -u takes optional arg, -nu might be interpreted as -n with value u? No, -n is bool.
-			// -u takes optional arg.
-			// If I type `cp -nu`, is it `-n` and `-u`?
-			// Yes.
-			// But my manual scanner fails to see `-u` inside `-nu`.
-			// I should verify this behavior.
-			// For now, let's just add test for separate flags to ensure coverage of existing logic.
-			args:        []string{"-n", "-u", "src", "dest"},
+			name: "Precedence short flags combined (-nu)",
+			args: []string{"-nu", "src", "dest"},
 			wantSources: []string{"src"},
 			wantDest:    "dest",
 			wantUpdate:  config.UpdateReplaceOlder, // u wins
+		},
+		{
+			name: "Precedence short flags combined (-un)",
+			args: []string{"-un", "src", "dest"},
+			wantSources: []string{"src"},
+			wantDest:    "dest",
+			wantUpdate:  config.UpdateNone, // n wins
 		},
 		{
 			name:        "Precedence short flags separate (-u -n)",
@@ -352,6 +332,13 @@ func TestArgs(t *testing.T) {
 			wantSources: []string{"src"},
 			wantDest:    "dest",
 			wantUpdate:  config.UpdateNone, // n wins
+		},
+		{
+			name:        "No-clobber false (--no-clobber=false)",
+			args:        []string{"--no-clobber=false", "src", "dest"},
+			wantSources: []string{"src"},
+			wantDest:    "dest",
+			wantUpdate:  config.UpdateReplaceAll,
 		},
 		{
 			name:        "Preserve empty value (--preserve=)",
@@ -390,10 +377,10 @@ func TestArgs(t *testing.T) {
 			},
 		},
 		{
-			name:        "Preserve unknown attribute (ignored)",
-			args:        []string{"--preserve=foobar", "src", "dest"},
-			wantSources: []string{"src"},
-			wantDest:    "dest",
+			name:         "Preserve unknown attribute (ignored)",
+			args:         []string{"--preserve=foobar", "src", "dest"},
+			wantSources:  []string{"src"},
+			wantDest:     "dest",
 			wantPreserve: config.PreserveOptions{},
 		},
 		{
@@ -406,6 +393,18 @@ func TestArgs(t *testing.T) {
 				Context:   true,
 				Xattr:     true,
 				Ownership: true,
+			},
+		},
+		{
+			name:        "Preserve defaults string",
+			args:        []string{"--preserve=defaults", "src", "dest"},
+			wantSources: []string{"src"},
+			wantDest:    "dest",
+			wantPreserve: config.PreserveOptions{
+				Mode:       true,
+				Ownership:  true,
+				Timestamps: true,
+				Links:      true,
 			},
 		},
 	}
