@@ -4,14 +4,17 @@ package display
 
 import (
 	"bytes"
+	"errors"
 	"io/fs"
 	"os"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
 
 	"github.com/ioluas/gopherutils/internal/fsutil"
 	"github.com/ioluas/gopherutils/utils/file/ls/internal/config"
+	"github.com/ioluas/gopherutils/utils/file/ls/internal/entry"
 	"github.com/ioluas/gopherutils/utils/file/ls/internal/timeutil"
 )
 
@@ -22,12 +25,16 @@ type mockDirEntry struct {
 	fileSiz int64
 	modTime time.Time
 	sysStat *syscall.Stat_t // For owner/group testing
+	infoErr error           // For error testing
 }
 
 func (m mockDirEntry) Name() string      { return m.name }
 func (m mockDirEntry) IsDir() bool       { return m.fileMod.IsDir() }
 func (m mockDirEntry) Type() fs.FileMode { return m.fileMod.Type() }
 func (m mockDirEntry) Info() (fs.FileInfo, error) {
+	if m.infoErr != nil {
+		return nil, m.infoErr
+	}
 	return mockFileInfo{
 		name:    m.name,
 		mode:    m.fileMod,
@@ -79,12 +86,14 @@ func TestPrintLongList(t *testing.T) {
 		config         *config.Config
 		expectedStdout string
 		expectedStderr string
+		expectedError  bool
 	}{
 		{
 			name:           "empty entries",
 			entries:        []os.DirEntry{},
 			config:         &config.Config{},
 			expectedStdout: "",
+			expectedError:  false,
 		},
 		{
 			name: "basic file long list",
@@ -185,6 +194,20 @@ func TestPrintLongList(t *testing.T) {
 			},
 			expectedStdout: "-rw-r--r--  1 - - 1000 2023-04-01 10:30:00.000000000 +0000 windows.txt\n",
 		},
+		{
+			name: "error getting file info",
+			entries: []os.DirEntry{
+				mockDirEntry{
+					name:    "bad-file",
+					fileMod: 0644,
+					infoErr: errors.New("simulated info error"),
+				},
+			},
+			config:         &config.Config{},
+			expectedStdout: "",
+			expectedStderr: "ls: cannot access 'bad-file': simulated info error\n", // PrintLongList prints error to stderr
+			expectedError:  true,
+		},
 	}
 
 	for _, tt := range testCases {
@@ -193,9 +216,9 @@ func TestPrintLongList(t *testing.T) {
 			stderr := new(bytes.Buffer)
 
 			// The `hadError` check remains from the previous refactoring
-			hadError := PrintLongList(stdout, stderr, tt.entries, tt.config)
-			if hadError {
-				t.Errorf("Test %s: Expected no error, but PrintLongList reported one", tt.name)
+			hadError := PrintLongList(stdout, stderr, tt.entries, tt.config, false)
+			if hadError != tt.expectedError {
+				t.Errorf("Test %s: Expected error=%v, got %v", tt.name, tt.expectedError, hadError)
 			}
 
 			if actualStdout := stdout.String(); actualStdout != tt.expectedStdout {
@@ -206,5 +229,35 @@ func TestPrintLongList(t *testing.T) {
 				t.Errorf("Test %s: \nExpected stderr:\n%q\nActual stderr:\n%q", tt.name, tt.expectedStderr, actualStderr)
 			}
 		})
+	}
+}
+
+func TestPrintLongListWithCachedDirEntryError(t *testing.T) {
+	testErr := errors.New("cached error")
+	entries := []os.DirEntry{
+		&entry.CachedDirEntry{
+			DirEntry: mockDirEntry{
+				name:    "cached-error-file",
+				fileMod: 0644,
+			},
+			Err: testErr,
+		},
+	}
+
+	lsConfig := &config.Config{}
+	var stdout, stderr bytes.Buffer
+	hadError := PrintLongList(&stdout, &stderr, entries, lsConfig, false)
+
+	if !hadError {
+		t.Error("expected error to be reported")
+	}
+	if !strings.Contains(stderr.String(), "cached-error-file") {
+		t.Errorf("expected error message to contain filename, got %q", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "cached error") {
+		t.Errorf("expected error message to contain error text, got %q", stderr.String())
+	}
+	if stdout.String() != "" {
+		t.Errorf("expected no stdout output, got %q", stdout.String())
 	}
 }

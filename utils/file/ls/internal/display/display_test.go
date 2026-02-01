@@ -93,6 +93,133 @@ func TestQuoteName(t *testing.T) {
 	}
 }
 
+func TestQuoteQuotingStyles(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		style    config.QuotingStyle
+		escape   bool
+		expected string
+	}{
+		{
+			name:     "literal",
+			input:    "file\nname",
+			style:    config.QuotingStyleLiteral,
+			expected: "file\nname",
+		},
+		{
+			name:     "literal with escape override",
+			input:    "file\nname",
+			style:    config.QuotingStyleLiteral,
+			escape:   true,
+			expected: `file\nname`,
+		},
+		{
+			name:     "escape",
+			input:    "file\tname",
+			style:    config.QuotingStyleEscape,
+			expected: `file\tname`,
+		},
+		{
+			name:     "locale wraps escaped content",
+			input:    "file\nname",
+			style:    config.QuotingStyleLocale,
+			expected: "\u2018file\\nname\u2019",
+		},
+		{
+			name:     "locale preserves utf8",
+			input:    "cafe-雪",
+			style:    config.QuotingStyleLocale,
+			expected: "\u2018cafe-雪\u2019",
+		},
+		{
+			name:     "locale escapes control byte",
+			input:    "a\x01b",
+			style:    config.QuotingStyleLocale,
+			expected: "\u2018a\\x01b\u2019",
+		},
+		{
+			name:     "shell no quoting needed",
+			input:    "plain",
+			style:    config.QuotingStyleShell,
+			expected: "plain",
+		},
+		{
+			name:     "shell with space",
+			input:    "two words",
+			style:    config.QuotingStyleShell,
+			expected: "'two words'",
+		},
+		{
+			name:     "shell always",
+			input:    "plain",
+			style:    config.QuotingStyleShellAlways,
+			expected: "'plain'",
+		},
+		{
+			name:     "shell preserves utf8",
+			input:    "snow-雪",
+			style:    config.QuotingStyleShellAlways,
+			expected: "'snow-雪'",
+		},
+		{
+			name:     "shell escapes control byte",
+			input:    "a\x01b",
+			style:    config.QuotingStyleShell,
+			expected: "'a\x01b'",
+		},
+		{
+			name:     "shell escape",
+			input:    "two words",
+			style:    config.QuotingStyleShellEscape,
+			expected: "$'two words'",
+		},
+		{
+			name:     "shell escape always",
+			input:    "plain",
+			style:    config.QuotingStyleShellEscapeAlways,
+			expected: "$'plain'",
+		},
+		{
+			name:     "shell empty",
+			input:    "",
+			style:    config.QuotingStyleShell,
+			expected: "''",
+		},
+		{
+			name:     "shell always empty",
+			input:    "",
+			style:    config.QuotingStyleShellAlways,
+			expected: "''",
+		},
+		{
+			name:     "c style",
+			input:    "file\nname",
+			style:    config.QuotingStyleC,
+			expected: "\"file\\nname\"",
+		},
+		{
+			name:     "default branch",
+			input:    "file\nname",
+			style:    config.QuotingStyle(99),
+			expected: "file\nname",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			style := tt.style
+			if style == config.QuotingStyleLiteral && tt.escape {
+				style = config.QuotingStyleEscape
+			}
+			got := Quote(tt.input, style)
+			if got != tt.expected {
+				t.Errorf("Quote(%q, %v) = %q; want %q", tt.input, tt.style, got, tt.expected)
+			}
+		})
+	}
+}
+
 func TestLongListFormatArgsCombinations(t *testing.T) {
 	d := fileDetails{
 		mode:    "-rw-r--r--",
@@ -115,28 +242,28 @@ func TestLongListFormatArgsCombinations(t *testing.T) {
 	// Case 1: ShowAuthor=true, NoGroup=true
 	cfg := &config.Config{ShowAuthor: true, NoGroup: true}
 	format, args := longListFormatArgs(d, widths, cfg)
-	if !strings.Contains(format, "%-*s %-*s") || len(args) != 11 {
+	if !strings.Contains(format, "%-*s %-*s") || len(args) != 10 {
 		t.Errorf("Unexpected format or args for Author+NoGroup: %q, %d", format, len(args))
 	}
 
 	// Case 2: ShowAuthor=true, NoGroup=false
 	cfg = &config.Config{ShowAuthor: true, NoGroup: false}
 	format, args = longListFormatArgs(d, widths, cfg)
-	if !strings.Contains(format, "%-*s %-*s %-*s") || len(args) != 13 {
+	if !strings.Contains(format, "%-*s %-*s %-*s") || len(args) != 12 {
 		t.Errorf("Unexpected format or args for Author: %q, %d", format, len(args))
 	}
 
 	// Case 3: ShowAuthor=false, NoGroup=true
 	cfg = &config.Config{ShowAuthor: false, NoGroup: true}
 	format, args = longListFormatArgs(d, widths, cfg)
-	if strings.Contains(format, "%-*s %-*s %-*s") || len(args) != 9 {
+	if strings.Contains(format, "%-*s %-*s %-*s") || len(args) != 8 {
 		t.Errorf("Unexpected format or args for NoGroup: %q, %d", format, len(args))
 	}
 
 	// Case 4: Default (both false)
 	cfg = &config.Config{ShowAuthor: false, NoGroup: false}
 	_, args = longListFormatArgs(d, widths, cfg)
-	if len(args) != 11 {
+	if len(args) != 10 {
 		t.Errorf("Unexpected args for default: %d", len(args))
 	}
 }
@@ -168,48 +295,60 @@ func (m *mockFile) Fd() uintptr {
 }
 
 // Helper function to generate expected grid output, simulating PrintGrid's logic
-func generateExpectedGridOutput(names []string, width int) string {
+func generateExpectedGridOutput(names []string, termWidth int) string {
 	if len(names) == 0 {
 		return ""
 	}
 
-	maxLen := 0
-	for _, name := range names {
-		if len(name) > maxLen {
-			maxLen = len(name)
-		}
-	}
-	colWidth := maxLen + 2
+	n := len(names)
+	padding := 2
 
-	if colWidth > width {
-		colWidth = width
-	}
-	if colWidth == 0 {
-		colWidth = 1
-	}
+	// Try with increasing number of rows
+	for rows := 1; rows <= n; rows++ {
+		cols := (n + rows - 1) / rows
 
-	numCols := width / colWidth
-	if numCols == 0 {
-		numCols = 1
-	}
-	if numCols > len(names) {
-		numCols = len(names)
-	}
-
-	numRows := (len(names) + numCols - 1) / numCols
-
-	var buf bytes.Buffer
-	for r := 0; r < numRows; r++ {
-		for c := 0; c < numCols; c++ {
-			idx := c*numRows + r
-			if idx < len(names) {
-				format := fmt.Sprintf("%%-%ds", colWidth)
-				fmt.Fprintf(&buf, format, names[idx])
+		// Calculate width of each column
+		colWidths := make([]int, cols)
+		for c := 0; c < cols; c++ {
+			for r := 0; r < rows; r++ {
+				idx := c*rows + r
+				if idx < n {
+					l := len(names[idx])
+					if l > colWidths[c] {
+						colWidths[c] = l
+					}
+				}
 			}
 		}
-		fmt.Fprintln(&buf)
+
+		// Calculate total width required
+		totalWidth := 0
+		for _, w := range colWidths {
+			totalWidth += w
+		}
+		totalWidth += (cols - 1) * padding
+
+		// If it fits, or if we are forced to 1 column (rows==n), print it
+		if totalWidth <= termWidth || rows == n {
+			var buf bytes.Buffer
+			for r := 0; r < rows; r++ {
+				for c := 0; c < cols; c++ {
+					idx := c*rows + r
+					if idx < n {
+						if c < cols-1 {
+							format := fmt.Sprintf("%%-%ds", colWidths[c]+padding)
+							fmt.Fprintf(&buf, format, names[idx])
+						} else {
+							fmt.Fprint(&buf, names[idx])
+						}
+					}
+				}
+				fmt.Fprintln(&buf)
+			}
+			return buf.String()
+		}
 	}
-	return buf.String()
+	return ""
 }
 
 func TestPrintEntries(t *testing.T) {
@@ -224,6 +363,7 @@ func TestPrintEntries(t *testing.T) {
 	tests := []struct {
 		name           string
 		names          []string
+		cfg            *config.Config
 		isTerminal     bool
 		termWidth      int
 		expected       string
@@ -232,41 +372,72 @@ func TestPrintEntries(t *testing.T) {
 		{
 			name:       "empty list",
 			names:      []string{},
+			cfg:        &config.Config{},
 			isTerminal: true,
 			termWidth:  80,
 			expected:   "",
 		},
 		{
-			name:       "not a terminal",
+			name:       "not a terminal, no columnate",
 			names:      []string{"file1", "file2", "file3"},
+			cfg:        &config.Config{FormatMode: config.FormatDefault},
 			isTerminal: false,
 			termWidth:  80,
 			expected:   "file1\nfile2\nfile3\n",
 		},
 		{
-			name:       "terminal, single column (narrow width)",
+			name:       "terminal, no explicit columnate (defaults to grid)",
+			names:      []string{"file1", "file2", "file3"},
+			cfg:        &config.Config{FormatMode: config.FormatDefault},
+			isTerminal: true,
+			termWidth:  80,
+			expected:   generateExpectedGridOutput([]string{"file1", "file2", "file3"}, 80),
+		},
+		{
+			name:       "terminal, force one per line",
+			names:      []string{"file1", "file2", "file3"},
+			cfg:        &config.Config{FormatMode: config.FormatOnePerLine},
+			isTerminal: true,
+			termWidth:  80,
+			expected:   "file1\nfile2\nfile3\n",
+		},
+		{
+			name:       "terminal, columnate, single column (narrow width)",
 			names:      []string{"longfilename", "short"},
+			cfg:        &config.Config{FormatMode: config.FormatColumnate},
 			isTerminal: true,
 			termWidth:  10,
 			expected:   generateExpectedGridOutput([]string{"longfilename", "short"}, 10),
 		},
 		{
-			name:       "terminal, multiple columns",
+			name:       "terminal, columnate, multiple columns",
 			names:      []string{"a", "b", "c", "d", "e"},
+			cfg:        &config.Config{FormatMode: config.FormatColumnate},
 			isTerminal: true,
 			termWidth:  20,
 			expected:   generateExpectedGridOutput([]string{"a", "b", "c", "d", "e"}, 20),
 		},
 		{
-			name:       "terminal, multiple columns, longer names",
+			name:       "terminal, columnate, multiple columns, longer names",
 			names:      []string{"apple", "banana", "cherry", "date", "elderberry"},
+			cfg:        &config.Config{FormatMode: config.FormatColumnate},
 			isTerminal: true,
 			termWidth:  30,
 			expected:   generateExpectedGridOutput([]string{"apple", "banana", "cherry", "date", "elderberry"}, 30),
 		},
 		{
-			name:           "GetTermSize error, fallback to non-terminal",
+			name:           "GetTermSize error, columnate true, default to 80 chars",
 			names:          []string{"file1", "file2"},
+			cfg:            &config.Config{FormatMode: config.FormatColumnate},
+			isTerminal:     true,
+			termWidth:      80, // Terminal width doesn't matter if error occurs
+			getTermSizeErr: true,
+			expected:       generateExpectedGridOutput([]string{"file1", "file2"}, 80),
+		},
+		{
+			name:           "GetTermSize error, columnate false, consistent non-terminal style",
+			names:          []string{"file1", "file2"},
+			cfg:            &config.Config{FormatMode: config.FormatDefault},
 			isTerminal:     true,
 			termWidth:      80, // Terminal width doesn't matter if error occurs
 			getTermSizeErr: true,
@@ -290,7 +461,7 @@ func TestPrintEntries(t *testing.T) {
 			GetTermSizeFunc = mockGetTermSizeFunc
 
 			var buf mockFile
-			PrintEntries(&buf, tt.names)
+			PrintEntries(&buf, tt.names, tt.cfg)
 
 			if actual := buf.String(); actual != tt.expected {
 				t.Errorf("PrintEntries() got:\n%q\nwant:\n%q", actual, tt.expected)
@@ -389,5 +560,26 @@ func TestPrintGrid(t *testing.T) {
 				t.Errorf("PrintGrid(%v, %d) got:\n%q\nwant:\n%q", tt.names, tt.width, actual, tt.expected)
 			}
 		})
+	}
+}
+
+func TestShellQuote(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"simple", "simple"},
+		{"file name", "'file name'"},
+		{"file\nname", "'file\nname'"},
+		{"file'name", "'file'\\''name'"},
+		{"", "''"},
+		{"foo*", "'foo*'"},
+		{"param$name", "'param$name'"},
+	}
+	for _, tt := range tests {
+		got := ShellQuote(tt.input)
+		if got != tt.expected {
+			t.Errorf("ShellQuote(%q) = %q, want %q", tt.input, got, tt.expected)
+		}
 	}
 }

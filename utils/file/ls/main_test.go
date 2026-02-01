@@ -20,529 +20,9 @@ import (
 	lsconfig "github.com/ioluas/gopherutils/utils/file/ls/internal/config"
 	"github.com/ioluas/gopherutils/utils/file/ls/internal/display"
 	"github.com/ioluas/gopherutils/utils/file/ls/internal/entry"
-	"github.com/ioluas/gopherutils/utils/file/ls/internal/parse"
 	"github.com/ioluas/gopherutils/utils/file/ls/internal/size"
 	"github.com/ioluas/gopherutils/utils/file/ls/internal/timeutil"
-
-	"github.com/spf13/pflag"
 )
-
-func TestParseArgs(t *testing.T) {
-	tests := []struct {
-		name        string
-		args        []string
-		expectError bool
-		checkConfig func(t *testing.T, config *lsconfig.Config)
-		setup       func() func()
-	}{
-		{
-			name:        "no arguments - use current directory",
-			args:        []string{},
-			expectError: false,
-			checkConfig: func(t *testing.T, config *lsconfig.Config) {
-				if config.ShowAll {
-					t.Error("Expected ShowAll to be false")
-				}
-				if config.HumanReadable {
-					t.Error("Expected HumanReadable to be false")
-				}
-				if len(config.Directories) != 1 || config.Directories[0] != "." {
-					t.Errorf("Expected directory \".\", got %v", config.Directories)
-				}
-			},
-		},
-		{
-			name:        "single directory argument",
-			args:        []string{"/tmp"},
-			expectError: false,
-			checkConfig: func(t *testing.T, config *lsconfig.Config) {
-				if config.ShowAll {
-					t.Error("Expected ShowAll to be false")
-				}
-				if config.HumanReadable {
-					t.Error("Expected HumanReadable to be false")
-				}
-				if len(config.Directories) != 1 || config.Directories[0] != "/tmp" {
-					t.Errorf("Expected directory /tmp, got %v", config.Directories)
-				}
-			},
-		},
-		{
-			name:        "multiple directory arguments",
-			args:        []string{"/tmp", "/var"},
-			expectError: false,
-			checkConfig: func(t *testing.T, config *lsconfig.Config) {
-				if len(config.Directories) != 2 {
-					t.Errorf("Expected 2 directories, got %d", len(config.Directories))
-				}
-				if config.Directories[0] != "/tmp" {
-					t.Errorf("Expected first directory /tmp, got %s", config.Directories[0])
-				}
-				if config.Directories[1] != "/var" {
-					t.Errorf("Expected second directory /var, got %s", config.Directories[1])
-				}
-			},
-		},
-		{
-			name:        "multiple directory arguments with flags",
-			args:        []string{"-a", "/tmp", "/var", "-l"},
-			expectError: false,
-			checkConfig: func(t *testing.T, config *lsconfig.Config) {
-				if !config.ShowAll {
-					t.Error("Expected ShowAll to be true")
-				}
-				if !config.LongListing {
-					t.Error("Expected LongListing to be true")
-				}
-				if len(config.Directories) != 2 {
-					t.Errorf("Expected 2 directories, got %d", len(config.Directories))
-				}
-				if config.Directories[0] != "/tmp" {
-					t.Errorf("Expected first directory /tmp, got %s", config.Directories[0])
-				}
-				if config.Directories[1] != "/var" {
-					t.Errorf("Expected second directory /var, got %s", config.Directories[1])
-				}
-			},
-		},
-		{
-			name:        "-a flag only",
-			args:        []string{"-a"},
-			expectError: false,
-			checkConfig: func(t *testing.T, config *lsconfig.Config) {
-				if !config.ShowAll {
-					t.Error("Expected ShowAll to be true")
-				}
-				if len(config.Directories) != 1 || config.Directories[0] != "." {
-					t.Errorf("Expected directory \".\", got %v", config.Directories)
-				}
-			},
-		},
-		{
-			name:        "--all flag only",
-			args:        []string{"--all"},
-			expectError: false,
-			checkConfig: func(t *testing.T, config *lsconfig.Config) {
-				if !config.ShowAll {
-					t.Error("Expected ShowAll to be true")
-				}
-				if len(config.Directories) != 1 || config.Directories[0] != "." {
-					t.Errorf("Expected directory \".\", got %v", config.Directories)
-				}
-			},
-		},
-		{
-			name:        "-a flag with directory",
-			args:        []string{"-a", "/tmp"},
-			expectError: false,
-			checkConfig: func(t *testing.T, config *lsconfig.Config) {
-				if !config.ShowAll {
-					t.Error("Expected ShowAll to be true")
-				}
-				if len(config.Directories) != 1 || config.Directories[0] != "/tmp" {
-					t.Errorf("Expected directory /tmp, got %v", config.Directories)
-				}
-			},
-		},
-		{
-			name:        "directory after -a flag",
-			args:        []string{"-a", "/var"},
-			expectError: false,
-			checkConfig: func(t *testing.T, config *lsconfig.Config) {
-				if !config.ShowAll {
-					t.Error("Expected ShowAll to be true")
-				}
-				if len(config.Directories) != 1 || config.Directories[0] != "/var" {
-					t.Errorf("Expected directory /var, got %v", config.Directories)
-				}
-			},
-		},
-		{
-			name:        "directory with --all flag",
-			args:        []string{"/tmp", "--all"},
-			expectError: false,
-			checkConfig: func(t *testing.T, config *lsconfig.Config) {
-				if !config.ShowAll {
-					t.Error("Expected ShowAll to be true")
-				}
-				if len(config.Directories) != 1 || config.Directories[0] != "/tmp" {
-					t.Errorf("Expected directory /tmp, got %v", config.Directories)
-				}
-			},
-		},
-		{
-			name:        "--author flag only",
-			args:        []string{"--author"},
-			expectError: false,
-			checkConfig: func(t *testing.T, config *lsconfig.Config) {
-				if !config.ShowAuthor {
-					t.Error("Expected ShowAuthor to be true")
-				}
-				if config.LongListing { // --author alone should not set -l
-					t.Error("Expected LongListing to be false")
-				}
-			},
-		},
-		{
-			name:        "-G flag only",
-			args:        []string{"-G"},
-			expectError: false,
-			checkConfig: func(t *testing.T, config *lsconfig.Config) {
-				if !config.NoGroup {
-					t.Error("Expected NoGroup to be true")
-				}
-				if config.LongListing {
-					t.Error("Expected LongListing to be false")
-				}
-			},
-		},
-		{
-			name:        "--no-group flag only",
-			args:        []string{"--no-group"},
-			expectError: false,
-			checkConfig: func(t *testing.T, config *lsconfig.Config) {
-				if !config.NoGroup {
-					t.Error("Expected NoGroup to be true")
-				}
-				if config.LongListing {
-					t.Error("Expected LongListing to be false")
-				}
-			},
-		},
-		{
-			name:        "--full-time flag only",
-			args:        []string{"--full-time"},
-			expectError: false,
-			checkConfig: func(t *testing.T, config *lsconfig.Config) {
-				if !config.FullTime {
-					t.Error("Expected FullTime to be true")
-				}
-			},
-		},
-		{
-			name:        "-l --author flags",
-			args:        []string{"-l", "--author"},
-			expectError: false,
-			checkConfig: func(t *testing.T, config *lsconfig.Config) {
-				if !config.LongListing {
-					t.Error("Expected LongListing to be true")
-				}
-				if !config.ShowAuthor {
-					t.Error("Expected ShowAuthor to be true")
-				}
-			},
-		},
-		{
-			name:        "-A flag only",
-			args:        []string{"-A"},
-			expectError: false,
-			checkConfig: func(t *testing.T, config *lsconfig.Config) {
-				if !config.ShowAlmostAll {
-					t.Error("Expected ShowAlmostAll to be true")
-				}
-				if config.ShowAll { // Ensure -a is not implicitly set
-					t.Error("Expected ShowAll to be false")
-				}
-				if len(config.Directories) != 1 || config.Directories[0] != "." {
-					t.Errorf("Expected directory \".\", got %v", config.Directories)
-				}
-			},
-		},
-		{
-			name:        "--almost-all flag only",
-			args:        []string{"--almost-all"},
-			expectError: false,
-			checkConfig: func(t *testing.T, config *lsconfig.Config) {
-				if !config.ShowAlmostAll {
-					t.Error("Expected ShowAlmostAll to be true")
-				}
-				if config.ShowAll { // Ensure -a is not implicitly set
-					t.Error("Expected ShowAll to be false")
-				}
-				if len(config.Directories) != 1 || config.Directories[0] != "." {
-					t.Errorf("Expected directory \".\", got %v", config.Directories)
-				}
-			},
-		},
-		{
-			name:        "-h flag",
-			args:        []string{"-h"},
-			expectError: false,
-			checkConfig: func(t *testing.T, config *lsconfig.Config) {
-				if !config.HumanReadable {
-					t.Error("Expected HumanReadable to be true")
-				}
-			},
-		},
-		{
-			name:        "--human-readable flag",
-			args:        []string{"--human-readable"},
-			expectError: false,
-			checkConfig: func(t *testing.T, config *lsconfig.Config) {
-				if !config.HumanReadable {
-					t.Error("Expected HumanReadable to be true")
-				}
-			},
-		},
-		{
-			name:        "-b flag",
-			args:        []string{"-b"},
-			expectError: false,
-			checkConfig: func(t *testing.T, config *lsconfig.Config) {
-				if !config.Escape {
-					t.Error("Expected Escape to be true")
-				}
-			},
-		},
-		{
-			name:        "--escape flag",
-			args:        []string{"--escape"},
-			expectError: false,
-			checkConfig: func(t *testing.T, config *lsconfig.Config) {
-				if !config.Escape {
-					t.Error("Expected Escape to be true")
-				}
-			},
-		},
-		{
-			name:        "-B flag",
-			args:        []string{"-B"},
-			expectError: false,
-			checkConfig: func(t *testing.T, config *lsconfig.Config) {
-				if !config.IgnoreBackups {
-					t.Error("Expected IgnoreBackups to be true")
-				}
-			},
-		},
-		{
-			name:        "--ignore-backups flag",
-			args:        []string{"--ignore-backups"},
-			expectError: false,
-			checkConfig: func(t *testing.T, config *lsconfig.Config) {
-				if !config.IgnoreBackups {
-					t.Error("Expected IgnoreBackups to be true")
-				}
-			},
-		},
-		{
-			name:        "--si flag",
-			args:        []string{"--si"},
-			expectError: false,
-			checkConfig: func(t *testing.T, config *lsconfig.Config) {
-				if !config.SI {
-					t.Error("Expected SI to be true")
-				}
-			},
-		},
-		{
-			name:        "-d flag",
-			args:        []string{"-d"},
-			expectError: false,
-			checkConfig: func(t *testing.T, config *lsconfig.Config) {
-				if !config.ListDirectory {
-					t.Error("Expected ListDirectory to be true")
-				}
-			},
-		},
-		{
-			name:        "--directory flag",
-			args:        []string{"--directory"},
-			expectError: false,
-			checkConfig: func(t *testing.T, config *lsconfig.Config) {
-				if !config.ListDirectory {
-					t.Error("Expected ListDirectory to be true")
-				}
-			},
-		},
-		{
-			name:        "unknown flag",
-			args:        []string{"-x"},
-			expectError: true,
-		},
-		{
-			name:        "--help flag",
-			args:        []string{"--help"},
-			expectError: true,
-			checkConfig: func(t *testing.T, config *lsconfig.Config) {
-				// When help is requested, config should be nil
-				if config != nil {
-					t.Error("Expected config to be nil when help is requested")
-				}
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(innerT *testing.T) { // Changed 't' to 'innerT'
-			if tt.setup != nil {
-				cleanup := tt.setup()
-				defer cleanup()
-			}
-			config, err := parse.ParseArgs(tt.args, io.Discard)
-
-			if tt.expectError {
-				if err == nil {
-					innerT.Error("Expected error but got none") // Use innerT
-				}
-				if tt.name == "--help flag" && !errors.Is(err, pflag.ErrHelp) {
-					innerT.Errorf("Expected pflag.ErrHelp for --help, but got %v", err)
-				}
-				// For help flag, config should be nil
-				if tt.name == "--help flag" && config != nil {
-					innerT.Error("Expected config to be nil when help is requested")
-				}
-			} else if err != nil {
-				innerT.Errorf("Unexpected error: %v", err) // Use innerT
-			}
-
-			if !tt.expectError && tt.checkConfig != nil {
-				tt.checkConfig(innerT, config) // Pass innerT
-			} else if tt.expectError && tt.checkConfig != nil {
-				tt.checkConfig(innerT, config) // Also check config for error cases
-			}
-		})
-	}
-}
-
-func TestParseArgsLong(t *testing.T) {
-	tests := []struct {
-		name       string
-		args       []string
-		expectedLL bool
-	}{
-		{
-			name:       "short flag -l",
-			args:       []string{"-l"},
-			expectedLL: true,
-		},
-		{
-			name:       "long flag --long",
-			args:       []string{"--long"},
-			expectedLL: true,
-		},
-		{
-			name:       "no flag",
-			args:       []string{},
-			expectedLL: false,
-		},
-		{
-			name:       "combined -la",
-			args:       []string{"-al"},
-			expectedLL: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			config, err := parse.ParseArgs(tt.args, io.Discard)
-			if err != nil {
-				t.Fatalf("Unexpected error: %v", err)
-			}
-			if config.LongListing != tt.expectedLL {
-				t.Errorf("Expected LongListing=%v, got %v", tt.expectedLL, config.LongListing)
-			}
-		})
-	}
-}
-
-func TestParseArgsTimeFlags(t *testing.T) {
-	var stderr bytes.Buffer
-	config, err := parse.ParseArgs([]string{"-t"}, &stderr)
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
-	if !config.SortTime {
-		t.Fatalf("Expected SortTime to be true")
-	}
-
-	config, err = parse.ParseArgs([]string{"--time=access"}, &stderr)
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
-	if config.TimeField != lsconfig.TimeFieldAccess {
-		t.Fatalf("Expected TimeField access, got %v", config.TimeField)
-	}
-	if !config.TimeFieldSet {
-		t.Fatalf("Expected TimeFieldSet to be true")
-	}
-}
-
-func TestParseArgsInvalidTimeWord(t *testing.T) {
-	var stderr bytes.Buffer
-	_, err := parse.ParseArgs([]string{"--time=invalid"}, &stderr)
-	if err == nil {
-		t.Fatalf("Expected error for invalid time word")
-	}
-}
-
-func TestParseArgsBlockSize(t *testing.T) {
-	t.Run("valid block size", func(t *testing.T) {
-		var stderr bytes.Buffer
-		config, err := parse.ParseArgs([]string{"--block-size=1K", "-l"}, &stderr)
-		if err != nil {
-			t.Fatalf("Unexpected error: %v", err)
-		}
-		if config.BlockSize == nil {
-			t.Fatal("Expected BlockSize to be set")
-		}
-		if config.BlockSize.SizeBytes != 1024 {
-			t.Errorf("Expected BlockSize sizeBytes=1024, got %d", config.BlockSize.SizeBytes)
-		}
-		if stderr.Len() != 0 {
-			t.Errorf("Expected no warnings, got %q", stderr.String())
-		}
-	})
-
-	t.Run("invalid block size warns and drops", func(t *testing.T) {
-		var stderr bytes.Buffer
-		config, err := parse.ParseArgs([]string{"--block-size=1X", "-l"}, &stderr)
-		if err != nil {
-			t.Fatalf("Unexpected error: %v", err)
-		}
-		if config.BlockSize != nil {
-			t.Fatal("Expected BlockSize to be nil for invalid size")
-		}
-		if !strings.Contains(stderr.String(), "unknown SIZE suffix") {
-			t.Errorf("Expected warning about unknown SIZE suffix, got %q", stderr.String())
-		}
-	})
-}
-
-func TestPrintEntries(t *testing.T) {
-	tests := []struct {
-		name     string
-		entries  []string
-		expected string
-	}{
-		{
-			name:     "single entry",
-			entries:  []string{"file1.txt"},
-			expected: "file1.txt\n",
-		},
-		{
-			name:     "multiple entries",
-			entries:  []string{"file1.txt", "file2.txt", "file3.txt"},
-			expected: "file1.txt\nfile2.txt\nfile3.txt\n",
-		},
-		{
-			name:     "empty directory",
-			entries:  []string{},
-			expected: "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var buf bytes.Buffer
-			display.PrintEntries(&buf, tt.entries)
-
-			got := buf.String()
-			if got != tt.expected {
-				t.Errorf("display.PrintEntries() output = %q, want %q", got, tt.expected)
-			}
-		})
-	}
-}
 
 // mockFileInfo is a mock implementation of fs.FileInfo for testing.
 type mockFileInfo struct {
@@ -593,66 +73,6 @@ func (m *mockDirEntry) Info() (fs.FileInfo, error) {
 	return nil, errors.New("not implemented")
 }
 
-func TestPrintLongListNonUnix(t *testing.T) {
-	now := time.Now()
-	mockEntries := []os.DirEntry{
-		&mockDirEntry{
-			name: "non-unix-file",
-			fileInfo: &mockFileInfo{
-				name:    "non-unix-file",
-				size:    1234,
-				mode:    0644,
-				modTime: now,
-				sys:     nil, // Not a *syscall.Stat_t
-			},
-		},
-	}
-
-	config := &lsconfig.Config{LongListing: true, ShowAuthor: true}
-	var stdout, stderr bytes.Buffer
-	hadError := display.PrintLongList(&stdout, &stderr, mockEntries, config)
-	if hadError {
-		t.Error("Expected no error from PrintLongList, but got one")
-	}
-
-	output := stdout.String()
-	if output == "" {
-		t.Errorf("Expected output for non-Unix entry, but got empty string")
-	}
-
-	// Output should contain nlink 1, size 1234, and placeholders for owner/group
-	// Format: mode nlink owner author group size date time name
-	if !strings.Contains(output, "non-unix-file") {
-		t.Errorf("Output should contain filename, got: %q", output)
-	}
-	if !strings.Contains(output, "1234") {
-		t.Errorf("Output should contain size 1234, got: %q", output)
-	}
-	// With ShowAuthor=true, placeholders should be present
-	if !strings.Contains(output, "-") {
-		t.Errorf("Output should contain placeholders '-' for owner/group, got: %q", output)
-	}
-
-	// Test without author
-	stdout.Reset()
-	config.ShowAuthor = false
-	hadError = display.PrintLongList(&stdout, &stderr, mockEntries, config)
-	if hadError {
-		t.Error("Expected no error from PrintLongList on second call, but got one")
-	}
-	output = stdout.String()
-	// Format: mode nlink owner group size date time name (no author column)
-	fields := strings.Fields(output)
-	// Expected fields: mode, nlink, owner, group, size, month, day, time, name
-	// Total 9 fields.
-	if len(fields) != 9 {
-		t.Errorf("Expected 9 fields when ShowAuthor is false, got %d: %v", len(fields), fields)
-	}
-	if !strings.Contains(output, " - ") {
-		t.Errorf("Expected placeholders '-' for owner/group, got %q", output)
-	}
-}
-
 func TestRun(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -661,6 +81,7 @@ func TestRun(t *testing.T) {
 		expectedExit   int
 		expectedStdout string
 		expectedStderr string
+		setup          func() func()
 	}{
 		{
 			name: "list directory with files",
@@ -885,6 +306,53 @@ func TestRun(t *testing.T) {
 			expectedStderr: "",
 		},
 		{
+			name: "ls with default (non-columnated) output",
+			setupFunc: func(t *testing.T) string {
+				tmpDir := t.TempDir()
+				if err := os.WriteFile(filepath.Join(tmpDir, "file1.txt"), []byte(""), 0644); err != nil {
+					t.Fatalf("failed to create file1.txt: %v", err)
+				}
+				if err := os.WriteFile(filepath.Join(tmpDir, "file2.txt"), []byte(""), 0644); err != nil {
+					t.Fatalf("failed to create file2.txt: %v", err)
+				}
+				return tmpDir
+			},
+			config:         &lsconfig.Config{FormatMode: lsconfig.FormatDefault},
+			expectedExit:   0,
+			expectedStdout: "file1.txt\nfile2.txt\n",
+			expectedStderr: "",
+		},
+		{
+			name: "ls -C (columnated) output",
+			setupFunc: func(t *testing.T) string {
+				tmpDir := t.TempDir()
+				if err := os.WriteFile(filepath.Join(tmpDir, "file1.txt"), []byte(""), 0644); err != nil {
+					t.Fatalf("failed to create file1.txt: %v", err)
+				}
+				if err := os.WriteFile(filepath.Join(tmpDir, "file2.txt"), []byte(""), 0644); err != nil {
+					t.Fatalf("failed to create file2.txt: %v", err)
+				}
+				return tmpDir
+			},
+			config: &lsconfig.Config{FormatMode: lsconfig.FormatColumnate},
+			// Mock terminal size to ensure columnated output
+			setup: func() func() {
+				originalIsTerminalFunc := display.IsTerminalFunc
+				originalGetTermSizeFunc := display.GetTermSizeFunc
+				display.IsTerminalFunc = func(fd int) bool { return true }
+				display.GetTermSizeFunc = func(fd int) (width, height int, err error) {
+					return 80, 24, nil
+				}
+				return func() {
+					display.IsTerminalFunc = originalIsTerminalFunc
+					display.GetTermSizeFunc = originalGetTermSizeFunc
+				}
+			},
+			expectedExit:   0,
+			expectedStdout: "file1.txt  file2.txt\n",
+			expectedStderr: "",
+		},
+		{
 			name: "ls --author alone (warn, no long listing)",
 			config: &lsconfig.Config{
 				ShowAuthor:  true,
@@ -917,7 +385,7 @@ func TestRun(t *testing.T) {
 			expectedExit: 0,
 			expectedStdout: func() string {
 				username, groupname := getUserDetails(t)
-				return getFileDetails(t, "file1.txt", username, groupname, false)
+				return "total 0\n" + getFileDetails(t, "file1.txt", username, groupname, false)
 			}(),
 			expectedStderr: "",
 		},
@@ -937,7 +405,7 @@ func TestRun(t *testing.T) {
 			expectedExit: 0,
 			expectedStdout: func() string {
 				username, groupname := getUserDetails(t)
-				return getFileDetails(t, "file1.txt", username, groupname, true)
+				return "total 0\n" + getFileDetails(t, "file1.txt", username, groupname, true)
 			}(),
 			expectedStderr: "",
 		},
@@ -957,6 +425,10 @@ func TestRun(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.setup != nil {
+				cleanup := tt.setup()
+				defer cleanup()
+			}
 			dir := tt.setupFunc(t)
 
 			// Create config if not provided
@@ -1047,102 +519,6 @@ func TestRunWithSubdirectories(t *testing.T) {
 	}
 }
 
-func TestPrintGrid(t *testing.T) {
-	tests := []struct {
-		name     string
-		entries  []string
-		width    int
-		expected string
-	}{
-		{
-			name:    "single column fit",
-			entries: []string{"a", "b", "c"},
-			width:   10,
-			// maxLen=1, colWidth=3. numCols=3. numRows=1.
-			// Output: "a  b  c  \n"
-			expected: "a  b  c  \n",
-		},
-		{
-			name:    "force multiple rows",
-			entries: []string{"a", "b", "c", "d"},
-			width:   5,
-			// maxLen=1, colWidth=3. numCols=1. numRows=4.
-			// Output:
-			// a
-			// b
-			// c
-			// d
-			expected: "a  \nb  \nc  \nd  \n",
-		},
-		{
-			name:    "2 columns",
-			entries: []string{"1", "2", "3", "4"},
-			width:   7,
-			// maxLen=1, colWidth=3. numCols=2. numRows=2.
-			// Row 0: 1, 3
-			// Row 1: 2, 4
-			// Output: "1  3  \n2  4  \n"
-			expected: "1  3  \n2  4  \n",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var buf bytes.Buffer
-			display.PrintGrid(&buf, tt.entries, tt.width)
-			got := buf.String()
-			if got != tt.expected {
-				t.Errorf("display.PrintGrid() output:\n%q\nwant:\n%q", got, tt.expected)
-			}
-		})
-	}
-}
-func TestFormatSize(t *testing.T) {
-	tests := []struct {
-		input    int64
-		expected string
-	}{
-		{0, "0"},
-		{100, "100"},
-		{1023, "1023"},
-		{1024, "1.0K"},
-		{1500, "1.5K"},
-		{1024 * 1024, "1.0M"},
-		{1024*1024*2 + 500*1024, "2.5M"},
-		{1024 * 1024 * 1024, "1.0G"},
-	}
-
-	for _, tt := range tests {
-		got := size.FormatSize(tt.input, 1024)
-		if got != tt.expected {
-			t.Errorf("size.FormatSize(%d, 1024) = %q, want %q", tt.input, got, tt.expected)
-		}
-	}
-}
-
-func TestFormatSizeSI(t *testing.T) {
-	tests := []struct {
-		input    int64
-		expected string
-	}{
-		{0, "0"},
-		{100, "100"},
-		{999, "999"},
-		{1000, "1.0K"},
-		{1500, "1.5K"},
-		{1000 * 1000, "1.0M"},
-		{1000*1000*2 + 500*1000, "2.5M"},
-		{1000 * 1000 * 1000, "1.0G"},
-	}
-
-	for _, tt := range tests {
-		got := size.FormatSize(tt.input, 1000)
-		if got != tt.expected {
-			t.Errorf("size.FormatSize(%d, 1000) = %q, want %q", tt.input, got, tt.expected)
-		}
-	}
-}
-
 // getUserDetails gets current user and group info for testing long listings
 func getUserDetails(t *testing.T) (string, string) {
 	currentUser, err := user.Current()
@@ -1171,7 +547,7 @@ func getFileDetails(t *testing.T, filename string, owner, group string, showAuth
 
 	mode := info.Mode().String()
 	nlink := 1 // For a newly created file
-	size := info.Size()
+	iSize := info.Size()
 	modTime := info.ModTime().Format("Jan 02 15:04")
 
 	// Max widths for a single file test case, assuming minimum widths as in display.PrintLongList
@@ -1179,10 +555,10 @@ func getFileDetails(t *testing.T, filename string, owner, group string, showAuth
 	if maxLinkLen < 2 {
 		maxLinkLen = 2
 	} // Assuming minimum 2 for nlink formatting
-	maxSizeLen := len(fmt.Sprint(size))
+	maxSizeLen := len(fmt.Sprint(iSize))
 	if maxSizeLen < 1 {
 		maxSizeLen = 1
-	} // Assuming minimum 1 for size formatting
+	} // Assuming minimum 1 for iSize formatting
 
 	maxOwnerLen := len(owner)
 	maxGroupLen := len(group)
@@ -1194,7 +570,7 @@ func getFileDetails(t *testing.T, filename string, owner, group string, showAuth
 			maxOwnerLen, owner,
 			maxAuthorLen, owner,
 			maxGroupLen, group,
-			maxSizeLen, size,
+			maxSizeLen, iSize,
 			modTime,
 			filename,
 		)
@@ -1204,35 +580,10 @@ func getFileDetails(t *testing.T, filename string, owner, group string, showAuth
 		maxLinkLen, nlink,
 		maxOwnerLen, owner,
 		maxGroupLen, group,
-		maxSizeLen, size,
+		maxSizeLen, iSize,
 		modTime,
 		filename,
 	)
-}
-
-func TestPrintLongListErrors(t *testing.T) {
-	config := &lsconfig.Config{LongListing: true}
-	mockEntries := []os.DirEntry{
-		&mockDirEntry{name: "good-file", isDir: false}, // This won't actually be processed fully
-		&mockDirEntry{name: "bad-file", isDir: false, infoErr: errors.New("simulated info error")},
-	}
-
-	var stdout, stderr bytes.Buffer
-	hadError := display.PrintLongList(&stdout, &stderr, mockEntries, config)
-	if !hadError {
-		t.Error("Expected an error from PrintLongList, but got none")
-	}
-
-	// Since the "good-file" doesn't have proper Info, it will also be skipped.
-	// Only the error condition is what we are testing here.
-	// The function should not panic and produce no output for the error entry.
-	expectedOutput := ""
-	if stdout.String() != expectedOutput {
-		t.Errorf("Expected output %q, got %q", expectedOutput, stdout.String())
-	}
-	if !strings.Contains(stderr.String(), "ls: cannot access 'bad-file'") {
-		t.Errorf("Expected warning on stderr, got %q", stderr.String())
-	}
 }
 
 func TestDirEntryWrapper(t *testing.T) {
@@ -1389,79 +740,6 @@ func TestPrintLongListWithShowAll(t *testing.T) {
 	}
 }
 
-func TestPrintGridEdgeCases(t *testing.T) {
-	tests := []struct {
-		name     string
-		entries  []string
-		width    int
-		expected string
-	}{
-		{
-			name:     "empty entries",
-			entries:  []string{},
-			width:    80,
-			expected: "",
-		},
-		{
-			name:    "zero width",
-			entries: []string{"a", "b"},
-			width:   0,
-			// When width is 0, colWidth becomes 1, numCols becomes 1, so output is "a\nb\n"
-			expected: "a\nb\n",
-		},
-		{
-			name:    "very narrow width",
-			entries: []string{"a", "b", "c"},
-			width:   1,
-			// When width is 1, colWidth becomes 1, numCols becomes 1, so output is "a\nb\nc\n"
-			expected: "a\nb\nc\n",
-		},
-		{
-			name:     "single entry",
-			entries:  []string{"single"},
-			width:    80,
-			expected: "single  \n",
-		},
-		{
-			name:     "long names",
-			entries:  []string{"verylongfilename1", "verylongfilename2", "verylongfilename3"},
-			width:    100,
-			expected: "verylongfilename1  verylongfilename2  verylongfilename3  \n",
-		},
-		{
-			name:    "mixed length names",
-			entries: []string{"a", "verylongname", "b", "c"},
-			width:   80,
-			// maxLen=12, colWidth=14, numCols=80/14=5, but limited to 4 entries, so numCols=4, numRows=1
-			// All 4 entries fit in one row: "a             verylongname  b             c             \n"
-			expected: "a             verylongname  b             c             \n",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var buf bytes.Buffer
-			display.PrintGrid(&buf, tt.entries, tt.width)
-			got := buf.String()
-			if got != tt.expected {
-				t.Errorf("display.PrintGrid() output:\n%q\nwant:\n%q", got, tt.expected)
-			}
-		})
-	}
-}
-
-func TestPrintLongListEmpty(t *testing.T) {
-	config := &lsconfig.Config{LongListing: true}
-	var stdout, stderr bytes.Buffer
-	hadError := display.PrintLongList(&stdout, &stderr, []os.DirEntry{}, config)
-	if hadError {
-		t.Error("Expected no error from PrintLongList with empty entries, but got one")
-	}
-	if stdout.String() != "" {
-		t.Errorf("Expected empty output for empty entries, got %q", stdout.String())
-	}
-}
-
 func TestPrintLongListWithoutAuthor(t *testing.T) {
 	tmpDir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(tmpDir, "file1.txt"), []byte("test"), 0644); err != nil {
@@ -1487,85 +765,20 @@ func TestPrintLongListWithoutAuthor(t *testing.T) {
 	}
 	// Verify it's in the expected format (no owner/group columns)
 	lines := strings.Split(strings.TrimSpace(output), "\n")
-	if len(lines) > 0 {
-		fields := strings.Fields(lines[0])
+	var dataLine string
+	for _, line := range lines {
+		if strings.HasPrefix(line, "total ") {
+			continue
+		}
+		dataLine = line
+		break
+	}
+	if dataLine != "" {
+		fields := strings.Fields(dataLine)
 		// Should have: mode, nlink, owner, group, size, date, time, name (8 fields)
 		if len(fields) < 8 {
 			t.Errorf("Expected at least 8 fields in long listing, got %d: %v", len(fields), fields)
 		}
-	}
-}
-
-func TestFormatSizeEdgeCases(t *testing.T) {
-	tests := []struct {
-		input    int64
-		expected string
-	}{
-		{0, "0"},
-		{1, "1"},
-		{1023, "1023"},
-		{1024, "1.0K"},
-		{1536, "1.5K"},
-		{1024 * 1024, "1.0M"},
-		{1024 * 1024 * 1024, "1.0G"},
-		{1024 * 1024 * 1024 * 1024, "1.0T"},
-		{1024 * 1024 * 1024 * 1024 * 1024, "1.0P"},
-		{1024 * 1024 * 1024 * 1024 * 1024 * 1024, "1.0E"},
-		{9223372036854775807, "8.0E"},
-		{2048, "2.0K"},
-		{5120, "5.0K"},
-		{1048576, "1.0M"},
-		{1073741824, "1.0G"},
-	}
-
-	for _, tt := range tests {
-		got := size.FormatSize(tt.input, 1024)
-		if got != tt.expected {
-			t.Errorf("size.FormatSize(%d, 1024) = %q, want %q", tt.input, got, tt.expected)
-		}
-	}
-}
-
-func TestParseArgsErrorCases(t *testing.T) {
-	tests := []struct {
-		name        string
-		args        []string
-		expectError bool
-	}{
-		{
-			name:        "invalid flag combination",
-			args:        []string{"-xyz"},
-			expectError: true,
-		},
-		{
-			name:        "help short flag",
-			args:        []string{"-?"},
-			expectError: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			config, err := parse.ParseArgs(tt.args, io.Discard)
-			if tt.expectError {
-				if err == nil {
-					t.Error("Expected error but got none")
-				}
-				if config != nil {
-					t.Error("Expected config to be nil on error")
-				}
-			} else if err != nil {
-				t.Errorf("Unexpected error: %v", err)
-			}
-		})
-	}
-}
-
-func TestPrintEntriesEmpty(t *testing.T) {
-	var buf bytes.Buffer
-	display.PrintEntries(&buf, []string{})
-	if buf.String() != "" {
-		t.Errorf("Expected empty output for empty entries, got %q", buf.String())
 	}
 }
 
@@ -1763,10 +976,18 @@ func TestPrintLongListWithNoGroup(t *testing.T) {
 	}
 
 	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
-	if len(lines) == 0 {
+	var dataLine string
+	for _, line := range lines {
+		if strings.HasPrefix(line, "total ") {
+			continue
+		}
+		dataLine = line
+		break
+	}
+	if dataLine == "" {
 		t.Fatalf("Expected output, got empty")
 	}
-	fields := strings.Fields(lines[0])
+	fields := strings.Fields(dataLine)
 	if len(fields) != 9 {
 		t.Fatalf("Expected 9 fields (mode nlink owner author size month day time name), got %d: %v", len(fields), fields)
 	}
@@ -1791,10 +1012,18 @@ func TestPrintLongListWithBlockSize(t *testing.T) {
 	}
 
 	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
-	if len(lines) == 0 {
+	var dataLine string
+	for _, line := range lines {
+		if strings.HasPrefix(line, "total ") {
+			continue
+		}
+		dataLine = line
+		break
+	}
+	if dataLine == "" {
 		t.Fatalf("Expected output, got empty")
 	}
-	fields := strings.Fields(lines[0])
+	fields := strings.Fields(dataLine)
 	if len(fields) < 8 {
 		t.Fatalf("Expected long listing fields, got %v", fields)
 	}
@@ -2063,7 +1292,7 @@ func TestIgnoreBackups(t *testing.T) {
 		{
 			name:     "no ignore-backups",
 			config:   &lsconfig.Config{},
-			expected: "README.md~\nfile1.txt\nfile1.txt~\nfile2.txt\n",
+			expected: "file1.txt\nfile1.txt~\nfile2.txt\nREADME.md~\n",
 		},
 		{
 			name:     "with ignore-backups",
@@ -2172,7 +1401,8 @@ func TestPrintEntriesTerminal(t *testing.T) {
 	}
 
 	w := &mockTerminalWriter{}
-	display.PrintEntries(w, []string{"a", "b", "c"})
+	config := &lsconfig.Config{FormatMode: lsconfig.FormatColumnate}
+	display.PrintEntries(w, []string{"a", "b", "c"}, config)
 	output := w.String()
 	// Should be in grid format
 	if !strings.Contains(output, "a  b  c") {
@@ -2184,11 +1414,11 @@ func TestPrintEntriesTerminal(t *testing.T) {
 		return 0, 0, errors.New("size error")
 	}
 	w.Reset()
-	display.PrintEntries(w, []string{"a", "b", "c"})
+	display.PrintEntries(w, []string{"a", "b", "c"}, config)
 	output = w.String()
-	// Should fall back to one per line
-	if output != "a\nb\nc\n" {
-		t.Errorf("Expected fallback to one per line, got %q", output)
+	// Should still use grid format with default width
+	if !strings.Contains(output, "a  b  c") {
+		t.Errorf("Expected grid format with default width, got %q", output)
 	}
 }
 func TestExecuteHelp(t *testing.T) {

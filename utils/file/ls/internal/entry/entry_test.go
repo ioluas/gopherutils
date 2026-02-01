@@ -172,3 +172,46 @@ func TestLessByTime_NotCachedDirEntry(t *testing.T) {
 		t.Fatal("expected name tiebreak when not CachedDirEntry")
 	}
 }
+
+func TestNewDirEntryWrapper(t *testing.T) {
+	info := &fileInfoStub{name: "test"}
+	testErr := errors.New("test error")
+
+	wrapper := NewDirEntryWrapper("test", "/path", true, info, testErr)
+
+	if wrapper.EntryName != "test" {
+		t.Errorf("expected EntryName 'test', got %q", wrapper.EntryName)
+	}
+	if wrapper.DirPath != "/path" {
+		t.Errorf("expected DirPath '/path', got %q", wrapper.DirPath)
+	}
+	if !wrapper.IsRoot {
+		t.Error("expected IsRoot to be true")
+	}
+	if wrapper.info != info {
+		t.Error("expected info to be set")
+	}
+	if wrapper.Err != testErr {
+		t.Error("expected Err to be set")
+	}
+}
+
+func TestDirEntryWrapperWithPrecomputedError(t *testing.T) {
+	testErr := errors.New("precomputed error")
+	wrapper := &DirEntryWrapper{
+		EntryName: "test",
+		DirPath:   "/path",
+		Err:       testErr,
+	}
+
+	_, err := wrapper.Info()
+	if err != testErr {
+		t.Errorf("expected error %v, got %v", testErr, err)
+	}
+
+	// Call again to ensure error is cached
+	_, err2 := wrapper.Info()
+	if err2 != testErr {
+		t.Errorf("expected cached error %v, got %v", testErr, err2)
+	}
+}

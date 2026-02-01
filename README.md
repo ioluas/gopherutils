@@ -11,7 +11,7 @@ Personal project to implement Linux coreutils in Go.
 | Command    | Description                                    | Documentation                     | Status   |
 |------------|------------------------------------------------|-----------------------------------|:---------|
 | `ls`       | List directory contents                        | [README](utils/file/ls/README.md) | &#9083;  |
-| `cp`       | Copy files and directories                     |                                   | &#10007; |
+| `cp`       | Copy files and directories                     | [README](utils/file/cp/README.md) | &#9083;  |
 | `mv`       | Move (rename) files                            |                                   | &#10007; |
 | `rm`       | Remove files or directories                    |                                   | &#10007; |
 | `unlink`   | Remove a file                                  |                                   | &#10007; |
@@ -166,22 +166,23 @@ Personal project to implement Linux coreutils in Go.
 
 This project uses a `Makefile` to manage builds, testing, and quality control.
 
-| Target           | Description                                                                       |
-|------------------|-----------------------------------------------------------------------------------|
-| `make all`       | Build all utilities (default)                                                     |
-| `make deps`      | Download and install Go dependencies                                              |
-| `make build`     | Alias for `all`                                                                   |
-| `make clean`     | Remove built binaries and test cache                                              |
-| `make test`      | Run tests for all utilities                                                       |
-| `make coverage`  | Run tests and generate coverage report                                            |
-| `make fmt`       | Format all Go code                                                                |
-| `make lint`      | Lint all Go code                                                                  |
-| `make vet`       | Vet all Go code                                                                   |
-| `make staticcheck`| Run staticcheck                                                                  |
-| `make CQ`        | Run Code Quality (lint, vet, staticcheck, fmt, coverage)                         |
-| `make list`      | List all discovered utilities                                                     |
-| `make install`   | Install binaries to user-local bin directory (configurable with `INSTALL_PREFIX`) |
-| `make uninstall` | Remove binaries from installation directory                                       |
-| `make help`      | Show help message with all targets                                                |
+| Target             | Description                                                                       |
+|--------------------|-----------------------------------------------------------------------------------|
+| `make all`         | Build all utilities (default)                                                     |
+| `make deps`        | Download and install Go dependencies                                              |
+| `make build`       | Alias for `all`                                                                   |
+| `make clean`       | Remove built binaries and test cache                                              |
+| `make test`        | Run tests for all utilities                                                       |
+| `make coverage`    | Run tests and generate coverage report                                            |
+| `make fmt`         | Format all Go code                                                                |
+| `make lint`        | Lint all Go code                                                                  |
+| `make vet`         | Vet all Go code                                                                   |
+| `make staticcheck` | Run staticcheck                                                                   |
+| `make CQ`          | Run Code Quality (lint, vet, staticcheck, fmt, coverage)                          |
+| `make list`        | List all discovered utilities                                                     |
+| `make install`     | Install binaries to user-local bin directory (configurable with `INSTALL_PREFIX`) |
+| `make uninstall`   | Remove binaries from installation directory                                       |
+| `make help`        | Show help message with all targets                                                |
+| `make gui`         | Show tcl interface for all targets                                                |
 
 
